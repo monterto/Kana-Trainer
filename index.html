@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Kana Trainer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14181C">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root{
+    /* dark ("yozora" / night-sky) is the default theme */
+    --paper:#14181C;
+    --paper-line:#2B333A;
+    --ink:#E9E4D8;
+    --ink-soft:#9B988C;
+    --indigo:#7FA6C2;
+    --indigo-deep:#9DBEDA;
+    --hanko:#E08370;
+    --moss:#8FBA8E;
+    --card:#1B2126;
+  }
+  [data-theme="light"]{
+    --paper:#EFE9DA;
+    --paper-line:#D5CBAF;
+    --ink:#26241F;
+    --ink-soft:#5B564A;
+    --indigo:#33526B;
+    --indigo-deep:#1F3A4D;
+    --hanko:#A83F32;
+    --moss:#5C7A5E;
+    --card:#F7F3E8;
+  }
+  body{ transition:background 0.15s, color 0.15s; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .jp{ font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP","MS Mincho",serif; }
+
+  header{
+    width:100%;
+    max-width:680px;
+    padding:28px 20px 14px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  header .title-row{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:12px;
+  }
+  h1{
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    font-weight:600;
+    font-size:26px;
+    margin:0;
+    letter-spacing:0.02em;
+  }
+  h1 .kana-mark{ color:var(--indigo); }
+  .tagline{
+    margin:4px 0 0;
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+  nav{
+    display:flex;
+    gap:2px;
+    margin-top:18px;
+  }
+  nav button{
+    flex:1;
+    padding:9px 6px;
+    background:transparent;
+    border:1px solid var(--paper-line);
+    border-bottom:none;
+    color:var(--ink-soft);
+    font-size:14px;
+    cursor:pointer;
+    border-radius:4px 4px 0 0;
+  }
+  nav button.active{
+    background:var(--card);
+    color:var(--ink);
+    border-color:var(--paper-line);
+    font-weight:600;
+  }
+  .theme-toggle{
+    background:transparent;
+    border:1px solid var(--paper-line);
+    color:var(--ink-soft);
+    font-size:12.5px;
+    padding:6px 12px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .theme-toggle:hover{ color:var(--ink); border-color:var(--indigo); }
+
+  main{
+    width:100%;
+    max-width:680px;
+    padding:26px 20px 60px;
+    flex:1;
+  }
+
+  /* ---------- Home / Study intro ---------- */
+  .summary-row{
+    display:flex;
+    gap:14px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  .stat-block{
+    flex:1;
+    min-width:120px;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:14px 16px;
+  }
+  .stat-block .num{
+    font-size:26px;
+    font-weight:600;
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    line-height:1;
+  }
+  .stat-block .lab{
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:6px;
+  }
+  .start-btn{
+    width:100%;
+    padding:16px;
+    background:var(--indigo);
+    color:#F7F3E8;
+    border:none;
+    font-size:16px;
+    cursor:pointer;
+    letter-spacing:0.01em;
+  }
+  .start-btn:hover{ background:var(--indigo-deep); }
+  .start-btn:disabled{ background:var(--paper-line); color:var(--ink-soft); cursor:default; }
+  p.help{ color:var(--ink-soft); font-size:13.5px; line-height:1.6; }
+
+  .row-progress{ margin-top:26px; }
+  .row-progress h3{ font-size:14px; font-weight:600; margin:0 0 10px; color:var(--ink-soft); }
+  .row-line{
+    display:flex; align-items:center; gap:10px;
+    padding:6px 0; border-bottom:1px solid var(--paper-line);
+    font-size:14px;
+  }
+  .row-line .rk{ font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; font-size:17px; width:110px; flex-shrink:0;}
+  .row-line .bar{ flex:1; height:6px; background:var(--paper-line); position:relative; }
+  .row-line .bar .fill{ position:absolute; left:0; top:0; bottom:0; background:var(--moss); }
+  .row-line .locked{ color:var(--paper-line); }
+  .row-line .pct{ width:38px; text-align:right; color:var(--ink-soft); font-size:12px;}
+
+  /* ---------- Card / Study view ---------- */
+  .session-bar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:13px; color:var(--ink-soft); margin-bottom:14px;
+  }
+  .session-bar .track{ flex:1; height:4px; background:var(--paper-line); margin:0 12px; position:relative;}
+  .session-bar .track .fill{ position:absolute; left:0;top:0;bottom:0; background:var(--indigo);}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--ink);
+    padding:0;
+    position:relative;
+  }
+  .card::before{
+    content:"";
+    position:absolute; inset:6px;
+    border:1px solid var(--paper-line);
+    pointer-events:none;
+  }
+  .card-inner{ padding:40px 24px; text-align:center; }
+  .prompt-label{ font-size:12px; color:var(--ink-soft); margin-bottom:14px; }
+  .prompt-kana{
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    font-size:88px; line-height:1;
+    color:var(--ink);
+  }
+  .prompt-romaji{
+    font-size:44px; font-weight:600; letter-spacing:0.03em;
+    color:var(--ink);
+  }
+
+  .answer-area{ margin-top:26px; }
+  .romaji-input{
+    width:100%; max-width:280px;
+    font-size:22px;
+    padding:12px 14px;
+    border:1px solid var(--ink-soft);
+    background:var(--card);
+    color:var(--ink);
+    text-align:center;
+    outline:none;
+  }
+  .romaji-input:focus{ border-color:var(--indigo); }
+  .submit-row{ margin-top:14px; }
+  .submit-btn{
+    padding:10px 26px; font-size:15px;
+    background:var(--indigo); color:#F7F3E8; border:none; cursor:pointer;
+  }
+  .submit-btn:disabled{ background:var(--paper-line); color:var(--ink-soft); }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(52px,1fr));
+    gap:8px;
+    margin-top:8px;
+  }
+  .grid button{
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    font-size:22px;
+    padding:10px 0;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    cursor:pointer;
+    color:var(--ink);
+  }
+  .grid button:hover{ border-color:var(--indigo); }
+  .grid button.correct{ background:var(--moss); color:#fff; border-color:var(--moss); }
+  .grid button.incorrect{ background:var(--hanko); color:#fff; border-color:var(--hanko); }
+  .grid button.reveal{ outline:2px solid var(--moss); }
+  .grid button:disabled{ cursor:default; opacity:0.55; }
+  .grid button:disabled.correct,.grid button:disabled.incorrect,.grid button:disabled.reveal{ opacity:1; }
+
+  .draw-wrap{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    margin-top:8px;
+  }
+  canvas.draw-canvas{
+    background:var(--card);
+    border:1px solid var(--ink-soft);
+    touch-action:none;
+    cursor:crosshair;
+    width:220px; height:220px;
+  }
+  .draw-tools{ display:flex; gap:8px; }
+  .draw-tools button{
+    padding:8px 14px; font-size:13px; border:1px solid var(--paper-line);
+    background:transparent; color:var(--ink-soft); cursor:pointer;
+  }
+  .draw-tools button:hover{ color:var(--ink); border-color:var(--indigo); }
+  .reveal-compare{
+    display:flex; align-items:center; justify-content:center; gap:26px;
+    margin-top:6px;
+  }
+  .reveal-compare .lbl{ font-size:11px; color:var(--ink-soft); margin-bottom:4px; }
+  .reveal-compare .answer-kana{
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    font-size:60px; color:var(--ink);
+  }
+  .self-grade{ display:flex; gap:10px; justify-content:center; margin-top:16px; }
+  .self-grade button{
+    padding:12px 22px; font-size:14px; border:none; cursor:pointer; color:#fff;
+  }
+  .self-grade .yes{ background:var(--moss); }
+  .self-grade .no{ background:var(--hanko); }
+
+  .feedback{
+    margin-top:18px; min-height:26px; font-size:15px; font-weight:600;
+  }
+  .feedback.good{ color:var(--moss); }
+  .feedback.bad{ color:var(--hanko); }
+
+  .next-btn{
+    margin-top:16px;
+    padding:10px 26px; font-size:15px;
+    background:var(--ink); color:var(--card); border:none; cursor:pointer;
+  }
+
+  .session-end{ text-align:center; padding:40px 10px; }
+  .session-end .num{ font-size:48px; font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; }
+
+  /* ---------- Stats ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--paper-line); }
+  th{ color:var(--ink-soft); font-weight:600; font-size:12px; }
+  td.kn{ font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; font-size:17px; }
+  .tag{ font-size:11px; padding:2px 6px; border:1px solid var(--paper-line); }
+  .tag.rev{ color:var(--moss); border-color:var(--moss); }
+  .tag.lrn{ color:var(--indigo); border-color:var(--indigo); }
+  .tag.new{ color:var(--ink-soft); }
+
+  /* ---------- Settings ---------- */
+  .field{ margin-bottom:20px; }
+  .field label{ display:block; font-size:13px; color:var(--ink-soft); margin-bottom:6px; }
+  .field input[type=number]{ width:90px; padding:7px 9px; border:1px solid var(--paper-line); font-size:15px; background:var(--card); color:var(--ink); }
+  .field .choice-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .field .choice-row button{
+    padding:8px 14px; font-size:13px; border:1px solid var(--paper-line);
+    background:var(--card); color:var(--ink); cursor:pointer;
+  }
+  .field .choice-row button.active{ background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .io-row{ display:flex; gap:10px; margin-top:6px; flex-wrap:wrap; }
+  .io-row button{ padding:10px 16px; font-size:13.5px; border:1px solid var(--ink); background:var(--card); color:var(--ink); cursor:pointer; }
+  .io-row button.primary{ background:var(--ink); color:var(--card); }
+  .warn-box{
+    background:var(--card); border:1px solid var(--hanko); color:var(--hanko);
+    padding:10px 14px; font-size:13px; margin-top:14px;
+  }
+  .note-box{
+    background:var(--card); border:1px solid var(--paper-line);
+    padding:10px 14px; font-size:12.5px; color:var(--ink-soft); margin-top:14px; line-height:1.6;
+  }
+  #importFile{ display:none; }
+
+  @media (prefers-reduced-motion:no-preference){
+    .card{ animation:settle 0.18s ease-out; }
+  }
+  @keyframes settle{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  button:focus-visible, input:focus-visible{ outline:2px solid var(--indigo); outline-offset:2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <h1><span class="jp kana-mark">仮</span> Kana Trainer</h1>
+  </div>
+  <nav>
+    <button id="navHome" class="active">Study</button>
+    <button id="navStats">Stats</button>
+    <button id="navSettings">Settings</button>
+  </nav>
+</header>
+
+<main id="main"></main>
+
+<input type="file" id="importFile" accept="application/json">
+
+<script>
+(function(){
+"use strict";
+
+/* ============================= KANA DATA ============================= */
+const ROWS = [
+  {id:'vowels', label:'あ行 vowels', items:[['あ','a'],['い','i'],['う','u'],['え','e'],['お','o']]},
+  {id:'k', label:'か行 k-row', items:[['か','ka'],['き','ki'],['く','ku'],['け','ke'],['こ','ko']]},
+  {id:'s', label:'さ行 s-row', items:[['さ','sa'],['し','shi'],['す','su'],['せ','se'],['そ','so']]},
+  {id:'t', label:'た行 t-row', items:[['た','ta'],['ち','chi'],['つ','tsu'],['て','te'],['と','to']]},
+  {id:'n', label:'な行 n-row', items:[['な','na'],['に','ni'],['ぬ','nu'],['ね','ne'],['の','no']]},
+  {id:'h', label:'は行 h-row', items:[['は','ha'],['ひ','hi'],['ふ','fu'],['へ','he'],['ほ','ho']]},
+  {id:'m', label:'ま行 m-row', items:[['ま','ma'],['み','mi'],['む','mu'],['め','me'],['も','mo']]},
+  {id:'y', label:'や行 y-row', items:[['や','ya'],['ゆ','yu'],['よ','yo']]},
+  {id:'r', label:'ら行 r-row', items:[['ら','ra'],['り','ri'],['る','ru'],['れ','re'],['ろ','ro']]},
+  {id:'wn', label:'わ・ん', items:[['わ','wa'],['を','wo'],['ん','n']]},
+  {id:'g', label:'が行 dakuten', items:[['が','ga'],['ぎ','gi'],['ぐ','gu'],['げ','ge'],['ご','go']]},
+  {id:'z', label:'ざ行 dakuten', items:[['ざ','za'],['じ','ji'],['ず','zu'],['ぜ','ze'],['ぞ','zo']]},
+  {id:'d', label:'だ行 dakuten', items:[['だ','da'],['ぢ','ji'],['づ','zu'],['で','de'],['ど','do']]},
+  {id:'b', label:'ば行 dakuten', items:[['ば','ba'],['び','bi'],['ぶ','bu'],['べ','be'],['ぼ','bo']]},
+  {id:'p', label:'ぱ行 handakuten', items:[['ぱ','pa'],['ぴ','pi'],['ぷ','pu'],['ぺ','pe'],['ぽ','po']]},
+  {id:'youon', label:'youon combos', optional:true, items:[
+    ['きゃ','kya'],['きゅ','kyu'],['きょ','kyo'],['しゃ','sha'],['しゅ','shu'],['しょ','sho'],
+    ['ちゃ','cha'],['ちゅ','chu'],['ちょ','cho'],['にゃ','nya'],['にゅ','nyu'],['にょ','nyo'],
+    ['ひゃ','hya'],['ひゅ','hyu'],['ひょ','hyo'],['みゃ','mya'],['みゅ','myu'],['みょ','myo'],
+    ['りゃ','rya'],['りゅ','ryu'],['りょ','ryo'],['ぎゃ','gya'],['ぎゅ','gyu'],['ぎょ','gyo'],
+    ['じゃ','ja'],['じゅ','ju'],['じょ','jo'],['びゃ','bya'],['びゅ','byu'],['びょ','byo'],
+    ['ぴゃ','pya'],['ぴゅ','pyu'],['ぴょ','pyo']
+  ]}
+];
+
+function altSpellings(r){
+  const pairs = [['shi','si'],['chi','ti'],['tsu','tu'],['fu','hu'],['ji','zi'],
+    ['sha','sya'],['shu','syu'],['sho','syo'],['cha','tya'],['chu','tyu'],['cho','tyo'],
+    ['ja','zya'],['ju','zyu'],['jo','zyo']];
+  const set = new Set([r]);
+  pairs.forEach(([a,b])=>{ if(r===a) set.add(b); if(r===b) set.add(a); });
+  if(r==='n') set.add('nn');
+  if(r==='wo') set.add('o');
+  return [...set];
+}
+
+/* Flat list of every kana with its row index for ordering/unlocking */
+const KANA_LIST = [];
+ROWS.forEach((row, ri)=>{
+  row.items.forEach(([kana, romaji])=>{
+    KANA_LIST.push({ kana, romaji, rowId: row.id, rowIndex: ri, rowLabel: row.label, optional: !!row.optional });
+  });
+});
+
+/* ============================= SETTINGS ============================= */
+const DEFAULT_SETTINGS = {
+  newPerDay: 5,
+  reviewCap: 40,
+  includeYouon: false,
+  directionMode: 'both',   // 'both' | 'recognition' | 'production'
+  kanaInputMode: 'draw',   // 'draw' (freehand, self-graded) | 'select' (tap grid)
+  gridScope: 'unlocked',   // 'unlocked' (only unlocked rows) | 'all' (every hiragana)
+  theme: 'dark'            // 'dark' | 'light'
+};
+
+/* ---------- Theme ---------- */
+function applyTheme(){
+  const t = state.settings.theme;
+  document.documentElement.dataset.theme = (t === 'light') ? 'light' : '';
+}
+
+/* ============================= STATE ============================= */
+/* No browser storage is used (this file can run inside Claude's in-chat
+   preview, where localStorage is not reliable). Progress lives in memory
+   and is saved/loaded as a JSON file — which also makes it trivially
+   portable between devices. */
+let state = {
+  settings: Object.assign({}, DEFAULT_SETTINGS),
+  cards: {},          // key: "kana|direction" -> card record
+  newIntroducedToday: 0,
+  lastActiveDate: todayStr(),
+  totals: { reviews:0, correct:0 },
+  forcedRows: [],      // deprecated, retained only for backward-compatible imports
+  rowOverrides: {},    // row id -> 'unlock' | 'lock', manual visibility toggle
+  createdAt: Date.now()
+};
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+/* ---------- Autosave (localStorage) ---------- */
+/* This runs as an installed, offline PWA now (not inside a chat preview),
+   so real browser storage is the right call: autosave on every change,
+   with manual export/import kept as your backup + cross-device path. */
+const STORAGE_KEY = 'kanaTrainerState';
+
+function persistState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(err){
+    /* storage unavailable/full — manual export still works as a fallback */
+  }
+}
+
+function loadPersistedState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(parsed && parsed.cards && parsed.settings) return parsed;
+  }catch(err){ /* ignore, fall back to fresh state */ }
+  return null;
+}
+
+function cardKey(kana, direction){ return kana + '|' + direction; }
+
+function ensureCard(item, direction){
+  const key = cardKey(item.kana, direction);
+  if(!state.cards[key]){
+    state.cards[key] = {
+      kana:item.kana, romaji:item.romaji, rowId:item.rowId, rowIndex:item.rowIndex,
+      direction,
+      phase:'new',        // new -> learning -> review (or relearning)
+      interval:0,          // days, once in review
+      ease:2.5,
+      reps:0,
+      lapses:0,
+      dueDate:null,        // for review-phase cards, ms epoch
+      reviewsCount:0,
+      correctCount:0,
+      lastLatency:null
+    };
+  }
+  return state.cards[key];
+}
+
+/* Reset the daily new-card counter if the date has rolled over */
+function rolloverDay(){
+  const t = todayStr();
+  if(state.lastActiveDate !== t){
+    state.lastActiveDate = t;
+    state.newIntroducedToday = 0;
+  }
+}
+
+/* Which rows are unlocked: a row unlocks once every card (both directions,
+   respecting current direction mode) in all previously-unlocked rows has
+   graduated out of 'new'/'learning' into 'review' at least once. This
+   caps how much the learner juggles at once (cognitive load) and only
+   widens the free-selection grid as competence grows. */
+function unlockedRowIndexes(){
+  const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
+  const directions = directionsForMode();
+
+  /* Natural gate: purely based on mastery, unaffected by manual overrides,
+     so progress-based unlocking keeps working even if a row is toggled
+     off for a while. */
+  const natural = new Set();
+  let sequentialOpen = true;
+  for(let i=0;i<activeRows.length;i++){
+    const row = activeRows[i];
+    if(!sequentialOpen) continue;
+    natural.add(row.id);
+    const items = KANA_LIST.filter(k => k.rowId === row.id);
+    const allGraduated = items.every(item =>
+      directions.every(dir => {
+        const c = state.cards[cardKey(item.kana, dir)];
+        return c && c.phase === 'review';
+      })
+    );
+    if(!allGraduated) sequentialOpen = false;
+  }
+
+  /* Manual override: 'unlock' forces a row in, 'lock' forces it out,
+     no override falls back to the natural gate above. */
+  const unlocked = new Set();
+  activeRows.forEach(row=>{
+    const override = state.rowOverrides ? state.rowOverrides[row.id] : undefined;
+    if(override === 'unlock') unlocked.add(row.id);
+    else if(override === 'lock') { /* stays out */ }
+    else if(natural.has(row.id)) unlocked.add(row.id);
+  });
+  return unlocked;
+}
+
+function directionsForMode(){
+  if(state.settings.directionMode === 'recognition') return ['recognition'];
+  if(state.settings.directionMode === 'production') return ['production'];
+  return ['recognition','production'];
+}
+
+function activeKanaList(){
+  const unlocked = unlockedRowIndexes();
+  return KANA_LIST.filter(k => (!k.optional || state.settings.includeYouon) && unlocked.has(k.rowId));
+}
+
+function gridPool(){
+  if(state.settings.gridScope === 'all'){
+    return KANA_LIST.filter(k => !k.optional || state.settings.includeYouon);
+  }
+  return activeKanaList();
+}
+
+/* ============================= SCHEDULING ============================= */
+const LEARN_LAG = [3,7];      // reinsert 3-7 cards later, same session
+const RELEARN_LAG = [2,4];
+const LEARN_STEPS_REQUIRED = 2; // correct answers needed to graduate
+
+function graded(card, correct, latencyMs){
+  state.totals.reviews++;
+  card.reviewsCount++;
+  card.lastLatency = latencyMs;
+  if(correct){ state.totals.correct++; card.correctCount++; }
+
+  if(card.phase === 'new'){
+    card.phase = 'learning';
+    card.learnProgress = 0;
+  }
+
+  if(card.phase === 'learning' || card.phase === 'relearning'){
+    if(correct){
+      card.learnProgress = (card.learnProgress||0) + 1;
+      if(card.learnProgress >= LEARN_STEPS_REQUIRED){
+        card.phase = 'review';
+        card.reps = 1;
+        card.interval = 1;
+        card.ease = card.ease || 2.5;
+        card.dueDate = Date.now() + 86400000;
+        return { requeue:false };
+      }
+      return { requeue:true, lag: randBetween(LEARN_LAG[0], LEARN_LAG[1]) };
+    } else {
+      card.learnProgress = 0;
+      return { requeue:true, lag: randBetween(RELEARN_LAG[0], RELEARN_LAG[1]) };
+    }
+  }
+
+  if(card.phase === 'review'){
+    if(correct){
+      const wideGrid = (card.direction === 'recognition' && state.settings.kanaInputMode === 'select' && state.settings.gridScope === 'all');
+      const q = wideGrid ? 4 : (latencyMs < 3000 ? 5 : (latencyMs < 7000 ? 4 : 3));
+      card.reps++;
+      if(card.reps === 1) card.interval = 1;
+      else if(card.reps === 2) card.interval = 6;
+      else card.interval = Math.round(card.interval * card.ease);
+      card.ease = Math.max(1.3, card.ease + (0.1 - (5-q)*(0.08 + (5-q)*0.02)));
+      card.dueDate = Date.now() + card.interval*86400000;
+      return { requeue:false };
+    } else {
+      card.lapses++;
+      card.phase = 'relearning';
+      card.learnProgress = 0;
+      card.interval = Math.max(1, Math.round(card.interval*0.5));
+      return { requeue:true, lag: randBetween(RELEARN_LAG[0], RELEARN_LAG[1]) };
+    }
+  }
+  return { requeue:false };
+}
+
+function randBetween(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+/* ============================= SESSION ============================= */
+let session = null; // { queue:[card,...], pos, correctCount, total, currentStart }
+
+function buildSession(){
+  rolloverDay();
+  const active = activeKanaList();
+  const directions = directionsForMode();
+  active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+
+  const now = Date.now();
+  const dueReview = [];
+  const dueLearning = [];
+  const freshNew = [];
+
+  Object.values(state.cards).forEach(c=>{
+    if(!active.find(a=>a.kana===c.kana)) return;
+    if(!directions.includes(c.direction)) return;
+    if(c.phase === 'review' && c.dueDate <= now) dueReview.push(c);
+    else if((c.phase === 'learning' || c.phase === 'relearning')) dueLearning.push(c);
+    else if(c.phase === 'new') freshNew.push(c);
+  });
+
+  shuffle(dueReview);
+  shuffle(freshNew);
+  const reviewSlice = dueReview.slice(0, state.settings.reviewCap);
+
+  const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
+  const newSlice = freshNew.slice(0, newBudget);
+
+  const queue = [];
+  dueLearning.forEach(c=>queue.push(c));
+  reviewSlice.forEach(c=>queue.push(c));
+  newSlice.forEach(c=>queue.push(c));
+  shuffle(queue);
+
+  return { queue, pos:0, correctCount:0, total:queue.length, newSlice };
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+
+function dueCount(){
+  rolloverDay();
+  const active = activeKanaList();
+  const directions = directionsForMode();
+  active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+  const now = Date.now();
+  let n = 0;
+  Object.values(state.cards).forEach(c=>{
+    if(!active.find(a=>a.kana===c.kana)) return;
+    if(!directions.includes(c.direction)) return;
+    if(c.phase==='review' && c.dueDate<=now) n++;
+    else if(c.phase==='learning' || c.phase==='relearning') n++;
+  });
+  const freshCount = Object.values(state.cards).filter(c=>{
+    if(!active.find(a=>a.kana===c.kana)) return false;
+    if(!directions.includes(c.direction)) return false;
+    return c.phase==='new';
+  }).length;
+  const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
+  return n + Math.min(newBudget, freshCount);
+}
+
+/* ============================= RENDERING ============================= */
+const $main = document.getElementById('main');
+let route = 'home';
+
+function setRoute(r){
+  route = r;
+  document.getElementById('navHome').classList.toggle('active', r==='home' || r==='study');
+  document.getElementById('navStats').classList.toggle('active', r==='stats');
+  document.getElementById('navSettings').classList.toggle('active', r==='settings');
+  render();
+}
+document.getElementById('navHome').onclick = ()=> setRoute('home');
+document.getElementById('navStats').onclick = ()=> setRoute('stats');
+document.getElementById('navSettings').onclick = ()=> setRoute('settings');
+
+function render(){
+  if(route==='home') renderHome();
+  else if(route==='study') renderCard();
+  else if(route==='stats') renderStats();
+  else if(route==='settings') renderSettings();
+  else if(route==='end') renderSessionEnd();
+}
+
+function renderHome(){
+  rolloverDay();
+  const graduated = Object.values(state.cards).filter(c=>c.phase==='review').length;
+  const total = Object.values(state.cards).length;
+  const acc = state.totals.reviews ? Math.round(100*state.totals.correct/state.totals.reviews) : 0;
+  const due = dueCount();
+
+  const unlocked = unlockedRowIndexes();
+  const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
+
+  let rowsHtml = '';
+  activeRows.forEach(row=>{
+    const isUnlocked = unlocked.has(row.id);
+    const items = KANA_LIST.filter(k=>k.rowId===row.id);
+    const directions = directionsForMode();
+    let done = 0, denom = items.length*directions.length;
+    items.forEach(item=> directions.forEach(dir=>{
+      const c = state.cards[cardKey(item.kana,dir)];
+      if(c && c.phase==='review') done++;
+    }));
+    const pct = denom ? Math.round(100*done/denom) : 0;
+    rowsHtml += `<div class="row-line">
+      <span class="rk ${isUnlocked?'':'locked'}">${row.items.map(i=>i[0]).join('')}</span>
+      <div class="bar"><div class="fill" style="width:${isUnlocked?pct:0}%"></div></div>
+      <span class="pct">${isUnlocked? pct+'%' : '🔒'}</span>
+    </div>`;
+  });
+
+  $main.innerHTML = `
+    <div class="summary-row">
+      <div class="stat-block"><div class="num">${due}</div><div class="lab">cards due now</div></div>
+      <div class="stat-block"><div class="num">${graduated}/${total||0}</div><div class="lab">graduated to review</div></div>
+      <div class="stat-block"><div class="num">${acc}%</div><div class="lab">lifetime accuracy</div></div>
+    </div>
+    <button class="start-btn" id="startBtn" ${due===0?'disabled':''}>${due===0 ? 'Nothing due — check back later' : 'Start session ('+due+' cards)'}</button>
+    <p class="help">New characters unlock one gojuon row at a time, and only after everything currently unlocked has graduated to spaced review. Up to ${state.settings.newPerDay} new characters are introduced per day.</p>
+    <div class="row-progress">
+      <h3>Row progress</h3>
+      ${rowsHtml}
+    </div>
+  `;
+  const btn = document.getElementById('startBtn');
+  if(btn) btn.onclick = ()=>{
+    session = buildSession();
+    session.newSlice.forEach(()=> state.newIntroducedToday++);
+    persistState();
+    setRoute('study');
+  };
+}
+
+function renderCard(){
+  if(!session || session.pos >= session.queue.length){
+    setRoute('end');
+    return;
+  }
+  const card = session.queue[session.pos];
+  const pct = Math.round(100*session.pos/session.total);
+
+  let body = '';
+  const drawMode = (card.direction === 'recognition' && state.settings.kanaInputMode === 'draw');
+
+  if(card.direction === 'production'){
+    body = `
+      <div class="prompt-label">Type the reading</div>
+      <div class="prompt-kana jp">${card.kana}</div>
+      <div class="answer-area">
+        <input type="text" id="romajiInput" class="romaji-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type romaji…">
+        <div class="submit-row"><button class="submit-btn" id="submitBtn">Check</button></div>
+      </div>
+      <div class="feedback" id="feedback"></div>
+    `;
+  } else if(drawMode){
+    body = `
+      <div class="prompt-label">Draw the matching kana from memory</div>
+      <div class="prompt-romaji">${card.romaji}</div>
+      <div class="draw-wrap">
+        <canvas id="drawCanvas" class="draw-canvas" width="220" height="220"></canvas>
+        <div class="draw-tools">
+          <button id="clearBtn" type="button">Clear</button>
+          <button id="revealBtn" type="button">Reveal answer</button>
+        </div>
+        <div id="revealZone"></div>
+      </div>
+      <div class="feedback" id="feedback"></div>
+    `;
+  } else {
+    const pool = gridPool();
+    const options = pool.slice();
+    shuffle(options);
+    body = `
+      <div class="prompt-label">Select the matching kana</div>
+      <div class="prompt-romaji">${card.romaji}</div>
+      <div class="answer-area">
+        <div class="grid" id="grid">
+          ${options.map(o=>`<button data-kana="${o.kana}">${o.kana}</button>`).join('')}
+        </div>
+      </div>
+      <div class="feedback" id="feedback"></div>
+    `;
+  }
+
+  $main.innerHTML = `
+    <div class="session-bar">
+      <span>${session.pos+1} / ${session.total}</span>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <span>${session.correctCount} correct</span>
+    </div>
+    <div class="card"><div class="card-inner">${body}</div></div>
+  `;
+
+  const startTime = Date.now();
+  let answered = false;
+
+  function finish(correct){
+    if(answered) return;
+    answered = true;
+    const latency = Date.now() - startTime;
+    const result = graded(card, correct, latency);
+    persistState();
+    session.pos++;
+    if(correct) session.correctCount++;
+
+    const fb = document.getElementById('feedback');
+    if(fb){
+      fb.className = 'feedback ' + (correct?'good':'bad');
+      fb.textContent = correct
+        ? (card.phase==='review' ? 'Correct — next review in ' + card.interval + ' day' + (card.interval===1?'':'s') : 'Correct')
+        : 'Not quite — ' + card.kana + ' is "' + card.romaji + '"';
+    }
+    if(result.requeue){
+      const insertAt = Math.min(session.queue.length, session.pos + result.lag);
+      session.queue.splice(insertAt, 0, card);
+      session.total = session.queue.length;
+    }
+    const cont = document.createElement('button');
+    cont.className = 'next-btn';
+    cont.textContent = 'Continue';
+    cont.onclick = renderCard;
+    document.querySelector('.card-inner').appendChild(cont);
+    document.querySelectorAll('.grid button, #submitBtn, #romajiInput, #clearBtn, #revealBtn, #selfYes, #selfNo').forEach(el=> el.disabled = true);
+    cont.focus();
+  }
+
+  if(card.direction === 'production'){
+    const input = document.getElementById('romajiInput');
+    const submitBtn = document.getElementById('submitBtn');
+    input.focus();
+    function submit(){
+      const val = input.value.trim().toLowerCase();
+      if(!val) return;
+      const accepted = altSpellings(card.romaji);
+      finish(accepted.includes(val));
+    }
+    submitBtn.onclick = submit;
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  } else if(drawMode){
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#26241F';
+    let drawing = false, lastX=0, lastY=0;
+
+    function pos(e){
+      const r = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / r.width, scaleY = canvas.height / r.height;
+      const cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+      const cy = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+      return [cx*scaleX, cy*scaleY];
+    }
+    function start(e){ e.preventDefault(); drawing = true; [lastX,lastY] = pos(e); }
+    function move(e){
+      if(!drawing) return;
+      e.preventDefault();
+      const [x,y] = pos(e);
+      ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(x,y); ctx.stroke();
+      [lastX,lastY] = [x,y];
+    }
+    function end(){ drawing = false; }
+    ['mousedown','touchstart'].forEach(ev=> canvas.addEventListener(ev, start));
+    ['mousemove','touchmove'].forEach(ev=> canvas.addEventListener(ev, move));
+    ['mouseup','mouseleave','touchend'].forEach(ev=> canvas.addEventListener(ev, end));
+
+    document.getElementById('clearBtn').onclick = ()=> ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    document.getElementById('revealBtn').onclick = ()=>{
+      document.getElementById('revealBtn').disabled = true;
+      document.getElementById('clearBtn').disabled = true;
+      document.getElementById('revealZone').innerHTML = `
+        <div class="reveal-compare">
+          <div><div class="lbl">your answer</div></div>
+          <div><div class="lbl">correct</div><div class="answer-kana jp">${card.kana}</div></div>
+        </div>
+        <div class="self-grade">
+          <button class="yes" id="selfYes">I had it right</button>
+          <button class="no" id="selfNo">I was wrong</button>
+        </div>
+      `;
+      document.getElementById('selfYes').onclick = ()=> finish(true);
+      document.getElementById('selfNo').onclick = ()=> finish(false);
+    };
+  } else {
+    document.querySelectorAll('#grid button').forEach(btn=>{
+      btn.onclick = ()=>{
+        if(answered) return;
+        const chosen = btn.dataset.kana;
+        const correct = chosen === card.kana;
+        if(correct){
+          btn.classList.add('correct');
+        } else {
+          btn.classList.add('incorrect');
+          document.querySelectorAll('#grid button').forEach(b=>{
+            if(b.dataset.kana === card.kana) b.classList.add('reveal');
+          });
+        }
+        finish(correct);
+      };
+    });
+  }
+}
+
+function renderSessionEnd(){
+  const pct = session.total ? Math.round(100*session.correctCount/session.total) : 0;
+  $main.innerHTML = `
+    <div class="session-end">
+      <div class="num">${pct}%</div>
+      <p>${session.correctCount} of ${session.total} correct this session.</p>
+      <button class="start-btn" id="doneBtn" style="max-width:260px;margin:20px auto 0;">Back to overview</button>
+    </div>
+    <div class="warn-box">Progress lives only in this browser tab. Go to <strong>Settings</strong> and export your progress file before closing, so you can pick up where you left off.</div>
+  `;
+  document.getElementById('doneBtn').onclick = ()=>{ session=null; setRoute('home'); };
+}
+
+function renderStats(){
+  const rows = Object.values(state.cards)
+    .filter(c=>c.phase!=='new')
+    .sort((a,b)=> a.rowIndex-b.rowIndex || (a.dueDate||0)-(b.dueDate||0));
+
+  const trs = rows.map(c=>{
+    const acc = c.reviewsCount ? Math.round(100*c.correctCount/c.reviewsCount) : 0;
+    const tagClass = c.phase==='review' ? 'rev' : 'lrn';
+    const due = c.phase==='review' ? new Date(c.dueDate).toLocaleDateString() : '—';
+    return `<tr>
+      <td class="kn">${c.kana}</td>
+      <td>${c.romaji}</td>
+      <td>${c.direction==='production'?'type':'select'}</td>
+      <td><span class="tag ${tagClass}">${c.phase}</span></td>
+      <td>${acc}%</td>
+      <td>${due}</td>
+    </tr>`;
+  }).join('');
+
+  const totalAcc = state.totals.reviews ? Math.round(100*state.totals.correct/state.totals.reviews) : 0;
+
+  $main.innerHTML = `
+    <div class="summary-row">
+      <div class="stat-block"><div class="num">${state.totals.reviews}</div><div class="lab">total reviews</div></div>
+      <div class="stat-block"><div class="num">${totalAcc}%</div><div class="lab">overall accuracy</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Kana</th><th>Romaji</th><th>Mode</th><th>Status</th><th>Accuracy</th><th>Next due</th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="6" style="color:var(--ink-soft);padding-top:14px;">No cards studied yet — start a session from the Study tab.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function renderSettings(){
+  persistState();
+  const s = state.settings;
+  $main.innerHTML = `
+    ${deferredInstallPrompt ? `
+    <div class="field">
+      <label>Install</label>
+      <button class="start-btn" id="installBtn" style="max-width:260px;">Install Kana Trainer</button>
+    </div>` : ''}
+    <div class="field">
+      <label>Appearance</label>
+      <div class="choice-row">
+        <button data-th="dark" class="${s.theme!=='light'?'active':''}">Dark</button>
+        <button data-th="light" class="${s.theme==='light'?'active':''}">Light</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>New characters introduced per day</label>
+      <input type="number" id="newPerDay" min="1" max="20" value="${s.newPerDay}">
+    </div>
+    <div class="field">
+      <label>Maximum review cards per session</label>
+      <input type="number" id="reviewCap" min="5" max="200" value="${s.reviewCap}">
+    </div>
+    <div class="field">
+      <label>Card direction</label>
+      <div class="choice-row">
+        <button data-v="both" class="${s.directionMode==='both'?'active':''}">Both</button>
+        <button data-v="recognition" class="${s.directionMode==='recognition'?'active':''}">Romaji → kana only</button>
+        <button data-v="production" class="${s.directionMode==='production'?'active':''}">Kana → romaji only</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Romaji → kana answer method</label>
+      <div class="choice-row">
+        <button data-ki="draw" class="${s.kanaInputMode==='draw'?'active':''}">Draw from memory (self-graded)</button>
+        <button data-ki="select" class="${s.kanaInputMode==='select'?'active':''}">Tap from grid</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Tap-grid pool</label>
+      <div class="choice-row">
+        <button data-gs="unlocked" class="${s.gridScope!=='all'?'active':''}">Unlocked characters only</button>
+        <button data-gs="all" class="${s.gridScope==='all'?'active':''}">All hiragana</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Youon combinations (きゃ, しゅ, etc.)</label>
+      <div class="choice-row">
+        <button data-yo="off" class="${!s.includeYouon?'active':''}">Off</button>
+        <button data-yo="on" class="${s.includeYouon?'active':''}">Include, after base rows</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Unlock rows manually</label>
+      <div class="choice-row" id="unlockRow"></div>
+    </div>
+    <div class="field">
+      <label>Progress file</label>
+      <div class="io-row">
+        <button class="primary" id="exportBtn">Export progress (.json)</button>
+        <button id="importBtn">Import progress</button>
+        <button id="resetBtn" style="border-color:var(--hanko);color:var(--hanko);">Reset all progress</button>
+      </div>
+    </div>
+  `;
+  const unlocked = unlockedRowIndexes();
+  const activeRows = ROWS.filter(r => !r.optional || s.includeYouon);
+  const unlockRowEl = document.getElementById('unlockRow');
+  activeRows.forEach(row=>{
+    const isUnlocked = unlocked.has(row.id);
+    const btn = document.createElement('button');
+    btn.textContent = row.items.map(i=>i[0]).join('') + (isUnlocked ? ' ✓' : ' 🔒');
+    if(isUnlocked) btn.className = 'active';
+    btn.onclick = ()=>{
+      if(!state.rowOverrides) state.rowOverrides = {};
+      state.rowOverrides[row.id] = isUnlocked ? 'lock' : 'unlock';
+      renderSettings();
+    };
+    unlockRowEl.appendChild(btn);
+  });
+  const resetBtn2 = document.createElement('button');
+  resetBtn2.textContent = 'Reset to automatic';
+  resetBtn2.onclick = ()=>{
+    state.rowOverrides = {};
+    renderSettings();
+  };
+  unlockRowEl.appendChild(resetBtn2);
+
+  document.getElementById('newPerDay').onchange = e=>{ s.newPerDay = Math.max(1, parseInt(e.target.value)||5); persistState(); };
+  document.getElementById('reviewCap').onchange = e=>{ s.reviewCap = Math.max(5, parseInt(e.target.value)||40); persistState(); };
+  document.querySelectorAll('[data-v]').forEach(b=> b.onclick = ()=>{ s.directionMode = b.dataset.v; renderSettings(); });
+  document.querySelectorAll('[data-yo]').forEach(b=> b.onclick = ()=>{ s.includeYouon = (b.dataset.yo==='on'); renderSettings(); });
+  document.querySelectorAll('[data-ki]').forEach(b=> b.onclick = ()=>{ s.kanaInputMode = b.dataset.ki; renderSettings(); });
+  document.querySelectorAll('[data-gs]').forEach(b=> b.onclick = ()=>{ s.gridScope = b.dataset.gs; renderSettings(); });
+  document.querySelectorAll('[data-th]').forEach(b=> b.onclick = ()=>{ s.theme = b.dataset.th; applyTheme(); renderSettings(); });
+  const installBtn = document.getElementById('installBtn');
+  if(installBtn) installBtn.onclick = async ()=>{
+    if(!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    renderSettings();
+  };
+
+  document.getElementById('exportBtn').onclick = exportProgress;
+  document.getElementById('importBtn').onclick = ()=> document.getElementById('importFile').click();
+  document.getElementById('resetBtn').onclick = ()=>{
+    if(confirm('This clears all saved progress on this device. Continue?')){
+      state = { settings:Object.assign({},DEFAULT_SETTINGS), cards:{}, newIntroducedToday:0, lastActiveDate:todayStr(), totals:{reviews:0,correct:0}, forcedRows:[], rowOverrides:{}, createdAt:Date.now() };
+      try{ localStorage.removeItem(STORAGE_KEY); }catch(err){}
+      renderSettings();
+    }
+  };
+}
+
+function exportProgress(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kana-trainer-progress-' + todayStr() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('importFile').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(parsed && parsed.cards && parsed.settings){
+        state = parsed;
+        if(!state.rowOverrides) state.rowOverrides = {};
+        if(Array.isArray(state.forcedRows)){
+          state.forcedRows.forEach(id => { if(!(id in state.rowOverrides)) state.rowOverrides[id] = 'unlock'; });
+        }
+        rolloverDay();
+        alert('Progress imported.');
+        renderSettings();
+      } else {
+        alert('That file does not look like a Kana Trainer progress export.');
+      }
+    }catch(err){
+      alert('Could not read that file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+/* ============================= INIT ============================= */
+const restored = loadPersistedState();
+if(restored){
+  state = restored;
+  if(!state.rowOverrides) state.rowOverrides = {};
+  if(Array.isArray(state.forcedRows)){
+    state.forcedRows.forEach(id => { if(!(id in state.rowOverrides)) state.rowOverrides[id] = 'unlock'; });
+  }
+}
+rolloverDay();
+applyTheme();
+setRoute('home');
+
+if('serviceWorker' in navigator && location.protocol !== 'file:'){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  });
+}
+
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if(route === 'settings') renderSettings();
+});
+
+})();
+</script>
+</body>
+</html>
