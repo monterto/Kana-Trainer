@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes app files, so old caches get replaced.
-const CACHE_NAME = 'kana-trainer-v1';
+const CACHE_NAME = 'kana-trainer-v1.01';
 
 const APP_SHELL = [
   './',

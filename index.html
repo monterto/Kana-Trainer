@@ -50,12 +50,13 @@
   header{
     width:100%;
     max-width:680px;
-    padding:28px 20px 14px;
+    padding:16px 20px 14px;
     border-bottom:1px solid var(--paper-line);
+    position:relative;
   }
   header .title-row{
     display:flex;
-    align-items:baseline;
+    align-items:center;
     justify-content:space-between;
     gap:12px;
   }
@@ -72,28 +73,43 @@
     font-size:13px;
     color:var(--ink-soft);
   }
-  nav{
-    display:flex;
-    gap:2px;
-    margin-top:18px;
-  }
-  nav button{
-    flex:1;
-    padding:9px 6px;
+  .menu-btn{
+    flex-shrink:0;
     background:transparent;
     border:1px solid var(--paper-line);
-    border-bottom:none;
-    color:var(--ink-soft);
-    font-size:14px;
-    cursor:pointer;
-    border-radius:4px 4px 0 0;
-  }
-  nav button.active{
-    background:var(--card);
     color:var(--ink);
-    border-color:var(--paper-line);
-    font-weight:600;
+    font-size:18px;
+    line-height:1;
+    padding:8px 12px;
+    cursor:pointer;
   }
+  .menu-panel{
+    position:absolute;
+    top:100%;
+    right:20px;
+    margin-top:6px;
+    display:flex;
+    flex-direction:column;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    min-width:160px;
+    z-index:20;
+    box-shadow:0 6px 18px rgba(0,0,0,0.25);
+  }
+  .menu-panel[hidden]{ display:none; }
+  .menu-panel button{
+    padding:12px 16px;
+    background:transparent;
+    border:none;
+    border-bottom:1px solid var(--paper-line);
+    color:var(--ink-soft);
+    font-size:14.5px;
+    text-align:left;
+    cursor:pointer;
+  }
+  .menu-panel button:last-child{ border-bottom:none; }
+  .menu-panel button.active{ color:var(--ink); font-weight:600; }
+  .menu-panel button:hover{ background:var(--paper); }
   .theme-toggle{
     background:transparent;
     border:1px solid var(--paper-line);
@@ -149,6 +165,44 @@
   }
   .start-btn:hover{ background:var(--indigo-deep); }
   .start-btn:disabled{ background:var(--paper-line); color:var(--ink-soft); cursor:default; }
+  .free-study-wrap{ position:relative; margin-top:10px; }
+  .muted-btn{
+    width:100%;
+    padding:11px;
+    background:transparent;
+    color:var(--ink-soft);
+    border:1px solid var(--paper-line);
+    font-size:13.5px;
+    cursor:pointer;
+  }
+  .muted-btn:hover{ color:var(--ink); border-color:var(--indigo); }
+  .sub-menu{
+    position:absolute;
+    top:100%;
+    left:0; right:0;
+    margin-top:6px;
+    display:flex;
+    flex-direction:column;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    z-index:15;
+    box-shadow:0 6px 18px rgba(0,0,0,0.25);
+    max-height:260px;
+    overflow-y:auto;
+  }
+  .sub-menu[hidden]{ display:none; }
+  .sub-menu button{
+    padding:11px 14px;
+    background:transparent;
+    border:none;
+    border-bottom:1px solid var(--paper-line);
+    color:var(--ink);
+    font-size:14px;
+    text-align:left;
+    cursor:pointer;
+  }
+  .sub-menu button:last-child{ border-bottom:none; }
+  .sub-menu button:hover{ background:var(--paper); }
   p.help{ color:var(--ink-soft); font-size:13.5px; line-height:1.6; }
 
   .row-progress{ margin-top:26px; }
@@ -158,7 +212,8 @@
     padding:6px 0; border-bottom:1px solid var(--paper-line);
     font-size:14px;
   }
-  .row-line .rk{ font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; font-size:17px; width:110px; flex-shrink:0;}
+  .row-line .rk{ font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; font-size:17px; width:140px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .row-line .rk.label{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:13px; }
   .row-line .bar{ flex:1; height:6px; background:var(--paper-line); position:relative; }
   .row-line .bar .fill{ position:absolute; left:0; top:0; bottom:0; background:var(--moss); }
   .row-line .locked{ color:var(--paper-line); }
@@ -270,6 +325,31 @@
   .self-grade .yes{ background:var(--moss); }
   .self-grade .no{ background:var(--hanko); }
 
+  .ref-section{ margin-top:22px; }
+  .ref-section:first-child{ margin-top:0; }
+  .ref-section h3{ font-size:14px; font-weight:600; margin:0 0 10px; color:var(--ink-soft); }
+  .ref-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(60px,1fr));
+    gap:8px;
+  }
+  .ref-cell{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:10px 4px 8px;
+    text-align:center;
+  }
+  .ref-cell .k{
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    font-size:22px;
+    color:var(--ink);
+  }
+  .ref-cell .r{
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-top:3px;
+  }
+
   .feedback{
     margin-top:18px; min-height:26px; font-size:15px; font-weight:600;
   }
@@ -331,12 +411,13 @@
 <header>
   <div class="title-row">
     <h1><span class="jp kana-mark">仮</span> Kana Trainer</h1>
+    <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">☰</button>
   </div>
-  <nav>
-    <button id="navHome" class="active">Study</button>
-    <button id="navStats">Stats</button>
-    <button id="navSettings">Settings</button>
-  </nav>
+  <div class="menu-panel" id="menuPanel" hidden>
+    <button data-route="home">Study</button>
+    <button data-route="reference">Answer key</button>
+    <button data-route="settings">Settings</button>
+  </div>
 </header>
 
 <main id="main"></main>
@@ -364,7 +445,7 @@ const ROWS = [
   {id:'d', label:'だ行 dakuten', items:[['だ','da'],['ぢ','ji'],['づ','zu'],['で','de'],['ど','do']]},
   {id:'b', label:'ば行 dakuten', items:[['ば','ba'],['び','bi'],['ぶ','bu'],['べ','be'],['ぼ','bo']]},
   {id:'p', label:'ぱ行 handakuten', items:[['ぱ','pa'],['ぴ','pi'],['ぷ','pu'],['ぺ','pe'],['ぽ','po']]},
-  {id:'youon', label:'youon combos', optional:true, items:[
+  {id:'youon', label:'Youon combinations', optional:true, items:[
     ['きゃ','kya'],['きゅ','kyu'],['きょ','kyo'],['しゃ','sha'],['しゅ','shu'],['しょ','sho'],
     ['ちゃ','cha'],['ちゅ','chu'],['ちょ','cho'],['にゃ','nya'],['にゅ','nyu'],['にょ','nyo'],
     ['ひゃ','hya'],['ひゅ','hyu'],['ひょ','hyo'],['みゃ','mya'],['みゅ','myu'],['みょ','myo'],
@@ -374,14 +455,23 @@ const ROWS = [
   ]}
 ];
 
-function altSpellings(r){
-  const pairs = [['shi','si'],['chi','ti'],['tsu','tu'],['fu','hu'],['ji','zi'],
+/* Kunrei/Nihon-shiki alternates that are genuinely ambiguous with another
+   character's Hepburn reading get scoped to the specific kana rather than
+   the romaji string, since じ/ぢ and ず/づ share a Hepburn romaji (ji/zu)
+   but do NOT share the same Kunrei-shiki alternate (じ=zi, ぢ=di; ず has
+   no alternate, づ=du). Applying these as a blanket romaji-level pair
+   would incorrectly accept "di" for じ or "du" for ず. */
+const KANA_SPECIFIC_ALTS = { 'じ':['zi'], 'ぢ':['di'], 'づ':['du'] };
+
+function altSpellings(r, kana){
+  const pairs = [['shi','si'],['chi','ti'],['tsu','tu'],['fu','hu'],
     ['sha','sya'],['shu','syu'],['sho','syo'],['cha','tya'],['chu','tyu'],['cho','tyo'],
     ['ja','zya'],['ju','zyu'],['jo','zyo']];
   const set = new Set([r]);
   pairs.forEach(([a,b])=>{ if(r===a) set.add(b); if(r===b) set.add(a); });
   if(r==='n') set.add('nn');
   if(r==='wo') set.add('o');
+  if(kana && KANA_SPECIFIC_ALTS[kana]) KANA_SPECIFIC_ALTS[kana].forEach(a=>set.add(a));
   return [...set];
 }
 
@@ -534,6 +624,17 @@ function activeKanaList(){
   return KANA_LIST.filter(k => (!k.optional || state.settings.includeYouon) && unlocked.has(k.rowId));
 }
 
+/* じ/ぢ and ず/づ share an identical Hepburn reading — genuinely ambiguous
+   when only the romaji is shown, since there's no way to tell which was
+   meant from the sound alone. Used to accept either as correct in select
+   mode, and to flag the ambiguity in the prompt so self-graders in draw
+   mode know either is fine too. */
+function homophonesOf(kana){
+  const item = KANA_LIST.find(k=>k.kana===kana);
+  if(!item) return [];
+  return KANA_LIST.filter(k=>k.romaji===item.romaji && k.kana!==kana).map(k=>k.kana);
+}
+
 function gridPool(){
   if(state.settings.gridScope === 'all'){
     return KANA_LIST.filter(k => !k.optional || state.settings.includeYouon);
@@ -602,7 +703,7 @@ function randBetween(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
 /* ============================= SESSION ============================= */
 let session = null; // { queue:[card,...], pos, correctCount, total, currentStart }
 
-function buildSession(){
+function buildSession(unlimited){
   rolloverDay();
   const active = activeKanaList();
   const directions = directionsForMode();
@@ -623,9 +724,9 @@ function buildSession(){
 
   shuffle(dueReview);
   shuffle(freshNew);
-  const reviewSlice = dueReview.slice(0, state.settings.reviewCap);
+  const reviewSlice = unlimited ? dueReview : dueReview.slice(0, state.settings.reviewCap);
 
-  const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
+  const newBudget = unlimited ? freshNew.length : Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
   const newSlice = freshNew.slice(0, newBudget);
 
   const queue = [];
@@ -635,6 +736,41 @@ function buildSession(){
   shuffle(queue);
 
   return { queue, pos:0, correctCount:0, total:queue.length, newSlice };
+}
+
+function startSession(unlimited){
+  session = buildSession(unlimited);
+  session.newSlice.forEach(()=> state.newIntroducedToday++);
+  persistState();
+  setRoute('study');
+}
+
+/* Free study: practice any already-introduced character any time, ignoring
+   due dates and daily caps entirely. Reviews here still update each card's
+   normal scheduling data (same as answering a due card) — an early correct
+   answer is still real evidence of recall strength, it just isn't gated by
+   the calendar. New (never-seen) characters are intentionally excluded here;
+   introducing those still goes through the daily cap / manual row unlock,
+   so this stays "extra reps on what you've started," not a bypass of that. */
+function buildFreeStudySession(rowId){
+  const active = activeKanaList();
+  const directions = directionsForMode();
+  active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+
+  const pool = Object.values(state.cards).filter(c=>{
+    if(c.phase === 'new') return false;
+    if(!active.find(a=>a.kana===c.kana)) return false;
+    if(!directions.includes(c.direction)) return false;
+    if(rowId && rowId !== 'all' && c.rowId !== rowId) return false;
+    return true;
+  });
+  shuffle(pool);
+  return { queue:pool, pos:0, correctCount:0, total:pool.length, newSlice:[] };
+}
+
+function startFreeStudy(rowId){
+  session = buildFreeStudySession(rowId);
+  setRoute('study');
 }
 
 function shuffle(arr){
@@ -672,20 +808,32 @@ let route = 'home';
 
 function setRoute(r){
   route = r;
-  document.getElementById('navHome').classList.toggle('active', r==='home' || r==='study');
-  document.getElementById('navStats').classList.toggle('active', r==='stats');
-  document.getElementById('navSettings').classList.toggle('active', r==='settings');
+  document.querySelectorAll('.menu-panel button[data-route]').forEach(b=>{
+    const isActive = b.dataset.route === r || (b.dataset.route==='home' && r==='study') || (b.dataset.route==='settings' && r==='stats');
+    b.classList.toggle('active', isActive);
+  });
+  closeMenu();
   render();
 }
-document.getElementById('navHome').onclick = ()=> setRoute('home');
-document.getElementById('navStats').onclick = ()=> setRoute('stats');
-document.getElementById('navSettings').onclick = ()=> setRoute('settings');
+
+const menuBtn = document.getElementById('menuBtn');
+const menuPanel = document.getElementById('menuPanel');
+function openMenu(){ menuPanel.hidden = false; menuBtn.setAttribute('aria-expanded','true'); }
+function closeMenu(){ menuPanel.hidden = true; menuBtn.setAttribute('aria-expanded','false'); }
+menuBtn.onclick = (e)=>{ e.stopPropagation(); menuPanel.hidden ? openMenu() : closeMenu(); };
+document.querySelectorAll('.menu-panel button[data-route]').forEach(b=>{
+  b.onclick = ()=> setRoute(b.dataset.route);
+});
+document.addEventListener('click', (e)=>{
+  if(!menuPanel.hidden && !menuPanel.contains(e.target) && e.target !== menuBtn) closeMenu();
+});
 
 function render(){
   if(route==='home') renderHome();
   else if(route==='study') renderCard();
   else if(route==='stats') renderStats();
   else if(route==='settings') renderSettings();
+  else if(route==='reference') renderReference();
   else if(route==='end') renderSessionEnd();
 }
 
@@ -693,7 +841,6 @@ function renderHome(){
   rolloverDay();
   const graduated = Object.values(state.cards).filter(c=>c.phase==='review').length;
   const total = Object.values(state.cards).length;
-  const acc = state.totals.reviews ? Math.round(100*state.totals.correct/state.totals.reviews) : 0;
   const due = dueCount();
 
   const unlocked = unlockedRowIndexes();
@@ -711,32 +858,50 @@ function renderHome(){
     }));
     const pct = denom ? Math.round(100*done/denom) : 0;
     rowsHtml += `<div class="row-line">
-      <span class="rk ${isUnlocked?'':'locked'}">${row.items.map(i=>i[0]).join('')}</span>
+      <span class="rk ${row.optional?'label':''} ${isUnlocked?'':'locked'}">${row.optional ? row.label : row.items.map(i=>i[0]).join('')}</span>
       <div class="bar"><div class="fill" style="width:${isUnlocked?pct:0}%"></div></div>
       <span class="pct">${isUnlocked? pct+'%' : '🔒'}</span>
     </div>`;
   });
 
+  const introducedCount = Object.values(state.cards).filter(c=>c.phase!=='new').length;
+  const unlockedRowsForSelect = activeRows.filter(r=>unlocked.has(r.id));
+  const freeStudyOptions = [{id:'all', label:'All studied characters'}].concat(
+    unlockedRowsForSelect.map(r=>({ id:r.id, label:r.optional ? r.label : r.items.map(i=>i[0]).join('') }))
+  );
+
   $main.innerHTML = `
     <div class="summary-row">
       <div class="stat-block"><div class="num">${due}</div><div class="lab">cards due now</div></div>
       <div class="stat-block"><div class="num">${graduated}/${total||0}</div><div class="lab">graduated to review</div></div>
-      <div class="stat-block"><div class="num">${acc}%</div><div class="lab">lifetime accuracy</div></div>
     </div>
     <button class="start-btn" id="startBtn" ${due===0?'disabled':''}>${due===0 ? 'Nothing due — check back later' : 'Start session ('+due+' cards)'}</button>
-    <p class="help">New characters unlock one gojuon row at a time, and only after everything currently unlocked has graduated to spaced review. Up to ${state.settings.newPerDay} new characters are introduced per day.</p>
+    ${introducedCount > 0 ? `
+    <div class="free-study-wrap">
+      <button class="muted-btn" id="freeStudyToggle">Free study</button>
+      <div class="sub-menu" id="freeStudyMenu" hidden>
+        ${freeStudyOptions.map(o=>`<button data-scope="${o.id}">${o.label}</button>`).join('')}
+      </div>
+    </div>` : ''}
     <div class="row-progress">
       <h3>Row progress</h3>
       ${rowsHtml}
     </div>
   `;
   const btn = document.getElementById('startBtn');
-  if(btn) btn.onclick = ()=>{
-    session = buildSession();
-    session.newSlice.forEach(()=> state.newIntroducedToday++);
-    persistState();
-    setRoute('study');
-  };
+  if(btn) btn.onclick = ()=> startSession(false);
+
+  const freeToggle = document.getElementById('freeStudyToggle');
+  const freeMenu = document.getElementById('freeStudyMenu');
+  if(freeToggle){
+    freeToggle.onclick = (e)=>{ e.stopPropagation(); freeMenu.hidden = !freeMenu.hidden; };
+    freeMenu.querySelectorAll('[data-scope]').forEach(b=>{
+      b.onclick = ()=> startFreeStudy(b.dataset.scope);
+    });
+    document.addEventListener('click', (e)=>{
+      if(!freeMenu.hidden && !freeMenu.contains(e.target) && e.target !== freeToggle) freeMenu.hidden = true;
+    });
+  }
 }
 
 function renderCard(){
@@ -749,6 +914,10 @@ function renderCard(){
 
   let body = '';
   const drawMode = (card.direction === 'recognition' && state.settings.kanaInputMode === 'draw');
+  const homophones = (card.direction === 'recognition') ? homophonesOf(card.kana) : [];
+  const homophoneNote = homophones.length
+    ? `<p class="help" style="margin-top:2px;">${homophones.join(' / ')} ${homophones.length>1?'are':'is'} also read "${card.romaji}" — either is correct here.</p>`
+    : '';
 
   if(card.direction === 'production'){
     body = `
@@ -764,6 +933,7 @@ function renderCard(){
     body = `
       <div class="prompt-label">Draw the matching kana from memory</div>
       <div class="prompt-romaji">${card.romaji}</div>
+      ${homophoneNote}
       <div class="draw-wrap">
         <canvas id="drawCanvas" class="draw-canvas" width="220" height="220"></canvas>
         <div class="draw-tools">
@@ -781,9 +951,10 @@ function renderCard(){
     body = `
       <div class="prompt-label">Select the matching kana</div>
       <div class="prompt-romaji">${card.romaji}</div>
+      ${homophoneNote}
       <div class="answer-area">
         <div class="grid" id="grid">
-          ${options.map(o=>`<button data-kana="${o.kana}">${o.kana}</button>`).join('')}
+          ${options.map(o=>`<button data-kana="${o.kana}" data-romaji="${o.romaji}">${o.kana}</button>`).join('')}
         </div>
       </div>
       <div class="feedback" id="feedback"></div>
@@ -802,7 +973,7 @@ function renderCard(){
   const startTime = Date.now();
   let answered = false;
 
-  function finish(correct){
+  function finish(correct, homophoneChosen){
     if(answered) return;
     answered = true;
     const latency = Date.now() - startTime;
@@ -814,9 +985,13 @@ function renderCard(){
     const fb = document.getElementById('feedback');
     if(fb){
       fb.className = 'feedback ' + (correct?'good':'bad');
-      fb.textContent = correct
-        ? (card.phase==='review' ? 'Correct — next review in ' + card.interval + ' day' + (card.interval===1?'':'s') : 'Correct')
-        : 'Not quite — ' + card.kana + ' is "' + card.romaji + '"';
+      if(homophoneChosen){
+        fb.textContent = 'Correct — ' + homophoneChosen + ' is also read "' + card.romaji + '"';
+      } else {
+        fb.textContent = correct
+          ? (card.phase==='review' ? 'Correct — next review in ' + card.interval + ' day' + (card.interval===1?'':'s') : 'Correct')
+          : 'Not quite — ' + card.kana + ' is "' + card.romaji + '"';
+      }
     }
     if(result.requeue){
       const insertAt = Math.min(session.queue.length, session.pos + result.lag);
@@ -839,7 +1014,7 @@ function renderCard(){
     function submit(){
       const val = input.value.trim().toLowerCase();
       if(!val) return;
-      const accepted = altSpellings(card.romaji);
+      const accepted = altSpellings(card.romaji, card.kana);
       finish(accepted.includes(val));
     }
     submitBtn.onclick = submit;
@@ -896,7 +1071,9 @@ function renderCard(){
       btn.onclick = ()=>{
         if(answered) return;
         const chosen = btn.dataset.kana;
-        const correct = chosen === card.kana;
+        const isExactMatch = chosen === card.kana;
+        const isHomophoneMatch = btn.dataset.romaji === card.romaji;
+        const correct = isExactMatch || isHomophoneMatch;
         if(correct){
           btn.classList.add('correct');
         } else {
@@ -905,7 +1082,7 @@ function renderCard(){
             if(b.dataset.kana === card.kana) b.classList.add('reveal');
           });
         }
-        finish(correct);
+        finish(correct, isHomophoneMatch && !isExactMatch ? chosen : null);
       };
     });
   }
@@ -913,15 +1090,32 @@ function renderCard(){
 
 function renderSessionEnd(){
   const pct = session.total ? Math.round(100*session.correctCount/session.total) : 0;
+  const moreDue = dueCount();
   $main.innerHTML = `
     <div class="session-end">
       <div class="num">${pct}%</div>
       <p>${session.correctCount} of ${session.total} correct this session.</p>
-      <button class="start-btn" id="doneBtn" style="max-width:260px;margin:20px auto 0;">Back to overview</button>
+      ${moreDue > 0 ? `<button class="start-btn" id="continueBtn" style="max-width:260px;margin:20px auto 0;">Keep studying (${moreDue} more due)</button>` : ''}
+      <button class="start-btn" id="doneBtn" style="max-width:260px;margin:${moreDue>0?'12px':'20px'} auto 0;background:transparent;color:var(--ink);border:1px solid var(--paper-line);">Back to overview</button>
     </div>
-    <div class="warn-box">Progress lives only in this browser tab. Go to <strong>Settings</strong> and export your progress file before closing, so you can pick up where you left off.</div>
   `;
+  const continueBtn = document.getElementById('continueBtn');
+  if(continueBtn) continueBtn.onclick = ()=> startSession(true);
   document.getElementById('doneBtn').onclick = ()=>{ session=null; setRoute('home'); };
+}
+
+function renderReference(){
+  const rows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
+  const sections = rows.map(row=>{
+    const cells = row.items.map(([kana, romaji])=>
+      `<div class="ref-cell"><div class="k jp">${kana}</div><div class="r">${romaji}</div></div>`
+    ).join('');
+    return `<div class="ref-section">
+      <h3>${row.label}</h3>
+      <div class="ref-grid">${cells}</div>
+    </div>`;
+  }).join('');
+  $main.innerHTML = sections;
 }
 
 function renderStats(){
@@ -946,6 +1140,7 @@ function renderStats(){
   const totalAcc = state.totals.reviews ? Math.round(100*state.totals.correct/state.totals.reviews) : 0;
 
   $main.innerHTML = `
+    <button class="muted-btn" id="backToSettings" style="margin-bottom:16px;">← Settings</button>
     <div class="summary-row">
       <div class="stat-block"><div class="num">${state.totals.reviews}</div><div class="lab">total reviews</div></div>
       <div class="stat-block"><div class="num">${totalAcc}%</div><div class="lab">overall accuracy</div></div>
@@ -955,12 +1150,17 @@ function renderStats(){
       <tbody>${trs || '<tr><td colspan="6" style="color:var(--ink-soft);padding-top:14px;">No cards studied yet — start a session from the Study tab.</td></tr>'}</tbody>
     </table>
   `;
+  document.getElementById('backToSettings').onclick = ()=> setRoute('settings');
 }
 
 function renderSettings(){
   persistState();
   const s = state.settings;
   $main.innerHTML = `
+    <div class="field">
+      <label>Review stats</label>
+      <button class="muted-btn" id="statsBtn">View stats</button>
+    </div>
     ${deferredInstallPrompt ? `
     <div class="field">
       <label>Install</label>
@@ -1021,6 +1221,7 @@ function renderSettings(){
         <button id="importBtn">Import progress</button>
         <button id="resetBtn" style="border-color:var(--hanko);color:var(--hanko);">Reset all progress</button>
       </div>
+      <p class="help" id="ioMsg" style="min-height:18px;"></p>
     </div>
   `;
   const unlocked = unlockedRowIndexes();
@@ -1029,7 +1230,7 @@ function renderSettings(){
   activeRows.forEach(row=>{
     const isUnlocked = unlocked.has(row.id);
     const btn = document.createElement('button');
-    btn.textContent = row.items.map(i=>i[0]).join('') + (isUnlocked ? ' ✓' : ' 🔒');
+    btn.textContent = (row.optional ? row.label : row.items.map(i=>i[0]).join('')) + (isUnlocked ? ' ✓' : ' 🔒');
     if(isUnlocked) btn.className = 'active';
     btn.onclick = ()=>{
       if(!state.rowOverrides) state.rowOverrides = {};
@@ -1061,15 +1262,29 @@ function renderSettings(){
     deferredInstallPrompt = null;
     renderSettings();
   };
+  document.getElementById('statsBtn').onclick = ()=> setRoute('stats');
 
   document.getElementById('exportBtn').onclick = exportProgress;
   document.getElementById('importBtn').onclick = ()=> document.getElementById('importFile').click();
+
+  let pendingReset = false;
+  let pendingResetTimer = null;
   document.getElementById('resetBtn').onclick = ()=>{
-    if(confirm('This clears all saved progress on this device. Continue?')){
-      state = { settings:Object.assign({},DEFAULT_SETTINGS), cards:{}, newIntroducedToday:0, lastActiveDate:todayStr(), totals:{reviews:0,correct:0}, forcedRows:[], rowOverrides:{}, createdAt:Date.now() };
-      try{ localStorage.removeItem(STORAGE_KEY); }catch(err){}
-      renderSettings();
+    const rBtn = document.getElementById('resetBtn');
+    if(!pendingReset){
+      pendingReset = true;
+      rBtn.textContent = 'Tap again to confirm';
+      pendingResetTimer = setTimeout(()=>{
+        pendingReset = false;
+        rBtn.textContent = 'Reset all progress';
+      }, 4000);
+      return;
     }
+    clearTimeout(pendingResetTimer);
+    pendingReset = false;
+    state = { settings:Object.assign({},DEFAULT_SETTINGS), cards:{}, newIntroducedToday:0, lastActiveDate:todayStr(), totals:{reviews:0,correct:0}, forcedRows:[], rowOverrides:{}, createdAt:Date.now() };
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(err){}
+    renderSettings();
   };
 }
 
@@ -1090,6 +1305,7 @@ document.getElementById('importFile').addEventListener('change', e=>{
   if(!file) return;
   const reader = new FileReader();
   reader.onload = ()=>{
+    const msg = document.getElementById('ioMsg');
     try{
       const parsed = JSON.parse(reader.result);
       if(parsed && parsed.cards && parsed.settings){
@@ -1099,13 +1315,14 @@ document.getElementById('importFile').addEventListener('change', e=>{
           state.forcedRows.forEach(id => { if(!(id in state.rowOverrides)) state.rowOverrides[id] = 'unlock'; });
         }
         rolloverDay();
-        alert('Progress imported.');
         renderSettings();
-      } else {
-        alert('That file does not look like a Kana Trainer progress export.');
+        const m = document.getElementById('ioMsg');
+        if(m) m.textContent = 'Progress imported.';
+      } else if(msg){
+        msg.textContent = 'That file does not look like a Kana Trainer progress export.';
       }
     }catch(err){
-      alert('Could not read that file: ' + err.message);
+      if(msg) msg.textContent = 'Could not read that file: ' + err.message;
     }
   };
   reader.readAsText(file);
