@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, interactive-widget=resizes-content">
 <title>Kana Trainer</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#14181C">
@@ -116,18 +116,18 @@
     flex-direction:column;
     background:var(--card);
     border:1px solid var(--paper-line);
-    min-width:160px;
+    min-width:210px;
     z-index:20;
     box-shadow:0 6px 18px rgba(0,0,0,0.25);
   border-radius:var(--radius);overflow:hidden;}
   .menu-panel[hidden]{ display:none; }
   .menu-panel button{
-    padding:12px 16px;
+    padding:16px 20px;
     background:transparent;
     border:none;
     border-bottom:1px solid var(--paper-line);
     color:var(--ink-soft);
-    font-size:14.5px;
+    font-size:17px;
     text-align:left;
     cursor:pointer;
   }
@@ -216,12 +216,12 @@
   border-radius:var(--radius);overflow:hidden;}
   .sub-menu[hidden]{ display:none; }
   .sub-menu button{
-    padding:11px 14px;
+    padding:16px 18px;
     background:transparent;
     border:none;
     border-bottom:1px solid var(--paper-line);
     color:var(--ink);
-    font-size:14px;
+    font-size:16px;
     text-align:left;
     cursor:pointer;
   }
@@ -335,10 +335,9 @@
   border-radius:var(--radius-sm);}
   .draw-tools button:hover{ color:var(--ink); border-color:var(--indigo); }
   .reveal-compare{
-    display:flex; align-items:center; justify-content:center; gap:26px;
+    display:flex; align-items:center; justify-content:center;
     margin-top:6px;
   }
-  .reveal-compare .lbl{ font-size:11px; color:var(--ink-soft); margin-bottom:4px; }
   .reveal-compare .answer-kana{
     font-family:"KanaTrainer JP","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif;
     font-size:60px; color:var(--ink);
@@ -626,7 +625,7 @@ function rolloverDay(){
    graduated out of 'new'/'learning' into 'review' at least once. This
    caps how much the learner juggles at once (cognitive load) and only
    widens the free-selection grid as competence grows. */
-function unlockedRowIndexes(){
+function naturallyUnlockedRowIds(){
   const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
   const directions = directionsForMode();
 
@@ -648,6 +647,12 @@ function unlockedRowIndexes(){
     );
     if(!allGraduated) sequentialOpen = false;
   }
+  return natural;
+}
+
+function unlockedRowIndexes(){
+  const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
+  const natural = naturallyUnlockedRowIds();
 
   /* Manual override: 'unlock' forces a row in, 'lock' forces it out,
      no override falls back to the natural gate above. */
@@ -751,6 +756,10 @@ function randBetween(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
 /* ============================= SESSION ============================= */
 let session = null; // { queue:[card,...], pos, correctCount, total, currentStart }
 
+function isForceUnlocked(rowId){
+  return !!(state.rowOverrides && state.rowOverrides[rowId] === 'unlock');
+}
+
 function buildSession(unlimited){
   rolloverDay();
   const active = activeKanaList();
@@ -774,8 +783,15 @@ function buildSession(unlimited){
   shuffle(freshNew);
   const reviewSlice = unlimited ? dueReview : dueReview.slice(0, state.settings.reviewCap);
 
-  const newBudget = unlimited ? freshNew.length : Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
-  const newSlice = freshNew.slice(0, newBudget);
+  /* Manually force-unlocked rows bypass the daily new-card pacing cap
+     entirely — forcing a row open is already an explicit request to study
+     it now, so it shouldn't then get silently blocked by the same budget
+     that governs normal progressive unlocking. */
+  const forcedNew = freshNew.filter(c=>isForceUnlocked(c.rowId));
+  const naturalNew = freshNew.filter(c=>!isForceUnlocked(c.rowId));
+  const newBudget = unlimited ? naturalNew.length : Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
+  const naturalSlice = naturalNew.slice(0, newBudget);
+  const newSlice = forcedNew.concat(naturalSlice);
 
   const queue = [];
   dueLearning.forEach(c=>queue.push(c));
@@ -783,7 +799,7 @@ function buildSession(unlimited){
   newSlice.forEach(c=>queue.push(c));
   shuffle(queue);
 
-  return { queue, pos:0, correctCount:0, total:queue.length, newSlice };
+  return { queue, pos:0, correctCount:0, total:queue.length, newSlice:naturalSlice };
 }
 
 function startSession(unlimited){
@@ -797,16 +813,16 @@ function startSession(unlimited){
    due dates and daily caps entirely. Reviews here still update each card's
    normal scheduling data (same as answering a due card) — an early correct
    answer is still real evidence of recall strength, it just isn't gated by
-   the calendar. New (never-seen) characters are intentionally excluded here;
-   introducing those still goes through the daily cap / manual row unlock,
-   so this stays "extra reps on what you've started," not a bypass of that. */
+   the calendar. New (never-seen) characters are excluded here UNLESS their
+   row was manually force-unlocked, in which case pacing has already been
+   explicitly overridden and they should be practiceable immediately too. */
 function buildFreeStudySession(rowId){
   const active = activeKanaList();
   const directions = directionsForMode();
   active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
 
   const pool = Object.values(state.cards).filter(c=>{
-    if(c.phase === 'new') return false;
+    if(c.phase === 'new' && !isForceUnlocked(c.rowId)) return false;
     if(!active.find(a=>a.kana===c.kana)) return false;
     if(!directions.includes(c.direction)) return false;
     if(rowId && rowId !== 'all' && c.rowId !== rowId) return false;
@@ -841,13 +857,15 @@ function dueCount(){
     if(c.phase==='review' && c.dueDate<=now) n++;
     else if(c.phase==='learning' || c.phase==='relearning') n++;
   });
-  const freshCount = Object.values(state.cards).filter(c=>{
+  const freshCards = Object.values(state.cards).filter(c=>{
     if(!active.find(a=>a.kana===c.kana)) return false;
     if(!directions.includes(c.direction)) return false;
     return c.phase==='new';
-  }).length;
+  });
+  const forcedFreshCount = freshCards.filter(c=>isForceUnlocked(c.rowId)).length;
+  const naturalFreshCount = freshCards.length - forcedFreshCount;
   const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
-  return n + Math.min(newBudget, freshCount);
+  return n + forcedFreshCount + Math.min(newBudget, naturalFreshCount);
 }
 
 /* ============================= RENDERING ============================= */
@@ -972,7 +990,7 @@ function renderCard(){
       <div class="prompt-label">Type the reading</div>
       <div class="prompt-kana jp">${card.kana}</div>
       <div class="answer-area">
-        <input type="text" id="romajiInput" class="romaji-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type romaji…">
+        <input type="text" id="romajiInput" class="romaji-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" placeholder="type romaji…">
         <div class="submit-row"><button class="submit-btn" id="submitBtn">Check</button></div>
       </div>
       <div class="feedback" id="feedback"></div>
@@ -1046,19 +1064,30 @@ function renderCard(){
       session.queue.splice(insertAt, 0, card);
       session.total = session.queue.length;
     }
-    const cont = document.createElement('button');
-    cont.className = 'next-btn';
-    cont.textContent = 'Continue';
-    cont.onclick = renderCard;
-    document.querySelector('.card-inner').appendChild(cont);
     document.querySelectorAll('.grid button, #submitBtn, #romajiInput, #clearBtn, #revealBtn, #selfYes, #selfNo').forEach(el=> el.disabled = true);
-    cont.focus();
+    if(drawMode){
+      /* Self-grading is already a deliberate two-step choice (reveal, then
+         judge yourself) — a third "Continue" tap on top of that is just
+         friction, so advance automatically after a brief moment to register
+         the feedback. */
+      setTimeout(renderCard, 500);
+    } else {
+      const cont = document.createElement('button');
+      cont.className = 'next-btn';
+      cont.textContent = 'Continue';
+      cont.onclick = renderCard;
+      document.querySelector('.card-inner').appendChild(cont);
+      cont.focus();
+    }
   }
 
   if(card.direction === 'production'){
     const input = document.getElementById('romajiInput');
     const submitBtn = document.getElementById('submitBtn');
     input.focus();
+    input.addEventListener('focus', ()=>{
+      setTimeout(()=> input.scrollIntoView({ block:'center', behavior:'smooth' }), 250);
+    });
     function submit(){
       const val = input.value.trim().toLowerCase();
       if(!val) return;
@@ -1074,6 +1103,21 @@ function renderCard(){
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#26241F';
+
+    function drawGuides(){
+      const guideColor = getComputedStyle(document.documentElement).getPropertyValue('--paper-line').trim() || '#888';
+      ctx.save();
+      ctx.strokeStyle = guideColor;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4,5]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
+      ctx.moveTo(0, canvas.height/2); ctx.lineTo(canvas.width, canvas.height/2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawGuides();
+
     let drawing = false, lastX=0, lastY=0;
 
     function pos(e){
@@ -1096,19 +1140,18 @@ function renderCard(){
     ['mousemove','touchmove'].forEach(ev=> canvas.addEventListener(ev, move));
     ['mouseup','mouseleave','touchend'].forEach(ev=> canvas.addEventListener(ev, end));
 
-    document.getElementById('clearBtn').onclick = ()=> ctx.clearRect(0,0,canvas.width,canvas.height);
+    document.getElementById('clearBtn').onclick = ()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); drawGuides(); };
 
     document.getElementById('revealBtn').onclick = ()=>{
       document.getElementById('revealBtn').disabled = true;
       document.getElementById('clearBtn').disabled = true;
       document.getElementById('revealZone').innerHTML = `
         <div class="reveal-compare">
-          <div><div class="lbl">your answer</div></div>
-          <div><div class="lbl">correct</div><div class="answer-kana jp">${card.kana}</div></div>
+          <div class="answer-kana jp">${card.kana}</div>
         </div>
         <div class="self-grade">
-          <button class="yes" id="selfYes">I had it right</button>
           <button class="no" id="selfNo">I was wrong</button>
+          <button class="yes" id="selfYes">I had it right</button>
         </div>
       `;
       document.getElementById('selfYes').onclick = ()=> finish(true);
@@ -1306,7 +1349,17 @@ function renderSettings(){
     if(isUnlocked) btn.className = 'active';
     btn.onclick = ()=>{
       if(!state.rowOverrides) state.rowOverrides = {};
-      state.rowOverrides[row.id] = isUnlocked ? 'lock' : 'unlock';
+      if(isUnlocked){
+        state.rowOverrides[row.id] = 'lock';
+      } else if(naturallyUnlockedRowIds().has(row.id)){
+        /* Already naturally unlocked (just hidden by a prior 'lock'
+           override) — clear the override instead of forcing 'unlock',
+           so it goes back to normal budget-paced behavior rather than
+           permanently bypassing the daily new-card cap. */
+        delete state.rowOverrides[row.id];
+      } else {
+        state.rowOverrides[row.id] = 'unlock';
+      }
       renderSettings();
     };
     unlockRowEl.appendChild(btn);
@@ -1413,6 +1466,13 @@ if(restored){
 rolloverDay();
 applyTheme();
 setRoute('home');
+
+/* Where supported (Chrome/Android), ask the OS keyboard to resize the
+   page layout around itself instead of floating on top of it, so it
+   doesn't cover the answer field or prompt while typing. */
+if('virtualKeyboard' in navigator){
+  try{ navigator.virtualKeyboard.overlaysContent = false; }catch(err){}
+}
 
 if('serviceWorker' in navigator && location.protocol !== 'file:'){
   window.addEventListener('load', ()=>{
