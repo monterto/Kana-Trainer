@@ -1,7 +1,7 @@
 {
   "name": "Kana Trainer",
   "short_name": "Kana Trainer",
-  "description": "Spaced-repetition hiragana recall trainer",
+  "description": "Spaced-repetition recall trainer",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

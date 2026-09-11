@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes app files, so old caches get replaced.
-const CACHE_NAME = 'kana-trainer-v1.04';
+const CACHE_NAME = 'kana-trainer-v1.05';
 
 const APP_SHELL = [
   './',
@@ -8,8 +8,8 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png',
-  './fonts/MPLUS1p-Hiragana-Regular.woff2',
-  './fonts/MPLUS1p-Hiragana-Medium.woff2'
+  './fonts/MPLUS1p-HiraKata-Regular.woff2',
+  './fonts/MPLUS1p-HiraKata-Medium.woff2'
 ];
 
 self.addEventListener('install', (event) => {

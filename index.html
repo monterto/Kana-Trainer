@@ -10,23 +10,23 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-  /* Bundled font: renders hiragana identically on every device, rather
+  /* Bundled font: renders kana identically on every device, rather
      than depending on whichever Japanese font (if any) happens to be
      installed. M PLUS 1p was chosen for clean, modern legibility with
      no Adobe/Reserved-Font-Name entanglement in its license (plain
-     OFL, Copyright The M+ Project Authors). Subsetted to just hiragana
-     + 仮, so it's under 8.5KB per weight instead of the multi-MB
-     original. Its 500 (Medium) weight is registered under the CSS
-     weight 600, since M PLUS 1p has no dedicated 600/SemiBold cut. */
+     OFL, Copyright The M+ Project Authors). Subsetted to hiragana +
+     katakana + 仮, so it's still only ~13KB per weight instead of the
+     multi-MB original. Its 500 (Medium) weight is registered under the
+     CSS weight 600, since M PLUS 1p has no dedicated 600/SemiBold cut. */
   @font-face{
     font-family:"KanaTrainer JP";
-    src:url("fonts/MPLUS1p-Hiragana-Regular.woff2") format("woff2");
+    src:url("fonts/MPLUS1p-HiraKata-Regular.woff2") format("woff2");
     font-weight:400;
     font-display:swap;
   }
   @font-face{
     font-family:"KanaTrainer JP";
-    src:url("fonts/MPLUS1p-Hiragana-Medium.woff2") format("woff2");
+    src:url("fonts/MPLUS1p-HiraKata-Medium.woff2") format("woff2");
     font-weight:600;
     font-display:swap;
   }
@@ -90,8 +90,40 @@
     font-size:26px;
     margin:0;
     letter-spacing:0.02em;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
   }
   h1 .kana-mark{ color:var(--indigo); }
+  .mode-switcher{ position:relative; flex-shrink:0; }
+  .mode-pill{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 14px;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    color:var(--ink);
+    font-size:16px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+  border-radius:var(--radius-pill);}
+  .mode-pill:hover{ border-color:var(--indigo); }
+  .mode-pill .mode-caret{
+    font-size:12px;
+    color:var(--ink-soft);
+    transition:transform 0.15s;
+    display:inline-block;
+  }
+  .mode-pill[aria-expanded="true"] .mode-caret{ transform:rotate(180deg); }
+  .mode-panel{
+    left:0; right:auto;
+    min-width:170px;
+  }
+  .sub-menu button.active{ color:var(--ink); font-weight:700; }
+  .sub-menu button:disabled{ opacity:0.4; cursor:not-allowed; }
   .tagline{
     margin:4px 0 0;
     font-size:13px;
@@ -432,6 +464,15 @@
     background:var(--card); color:var(--ink); cursor:pointer;
   border-radius:var(--radius-sm);}
   .field .choice-row button.active{ background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .choice-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .choice-row button{
+    padding:8px 14px; font-size:13px; border:1px solid var(--paper-line);
+    background:var(--card); color:var(--ink); cursor:pointer;
+  border-radius:var(--radius-sm);}
+  .choice-row button.active{ background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .choice-row button:disabled{ opacity:0.4; cursor:not-allowed; }
+  .script-switch{ margin-bottom:18px; }
+  .script-switch button{ flex:1; text-align:center; }
   .io-row{ display:flex; gap:10px; margin-top:6px; flex-wrap:wrap; }
   .io-row button{ padding:10px 16px; font-size:13.5px; border:1px solid var(--ink); background:var(--card); color:var(--ink); cursor:pointer; border-radius:var(--radius-sm);}
   .io-row button.primary{ background:var(--ink); color:var(--card); }
@@ -458,6 +499,17 @@
 <header>
   <div class="title-row">
     <h1><span class="jp kana-mark">仮</span> Kana Trainer</h1>
+    <div class="mode-switcher">
+      <button class="mode-pill" id="modePillBtn" aria-haspopup="true" aria-expanded="false">
+        <span id="modePillLabel">Hiragana</span><span class="mode-caret">⌄</span>
+      </button>
+      <div class="sub-menu mode-panel" id="modePanel" hidden>
+        <button data-script="hiragana">Hiragana</button>
+        <button data-script="katakana">Katakana</button>
+        <button data-script="mixed">Mixed</button>
+        <button disabled title="Coming soon">Kanji <span style="opacity:0.6;">(soon)</span></button>
+      </div>
+    </div>
     <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">☰</button>
   </div>
   <div class="menu-panel" id="menuPanel" hidden>
@@ -475,8 +527,13 @@
 (function(){
 "use strict";
 
-/* ============================= KANA DATA ============================= */
-const ROWS = [
+/* ============================= SCRIPT DATA ============================= */
+/* Each script (hiragana, katakana, ...future kanji) owns its own row list,
+   its own progressive unlock gate, and its own daily new-character budget.
+   Mastering one script never affects another's pacing — "lessons always
+   separated" is enforced structurally here, not just in the UI. */
+
+const HIRAGANA_ROWS = [
   {id:'vowels', label:'あ行 vowels', items:[['あ','a'],['い','i'],['う','u'],['え','e'],['お','o']]},
   {id:'k', label:'か行 k-row', items:[['か','ka'],['き','ki'],['く','ku'],['け','ke'],['こ','ko']]},
   {id:'s', label:'さ行 s-row', items:[['さ','sa'],['し','shi'],['す','su'],['せ','se'],['そ','so']]},
@@ -502,13 +559,71 @@ const ROWS = [
   ]}
 ];
 
+const KATAKANA_ROWS = [
+  {id:'vowels', label:'ア行 vowels', items:[['ア','a'],['イ','i'],['ウ','u'],['エ','e'],['オ','o']]},
+  {id:'k', label:'カ行 k-row', items:[['カ','ka'],['キ','ki'],['ク','ku'],['ケ','ke'],['コ','ko']]},
+  {id:'s', label:'サ行 s-row', items:[['サ','sa'],['シ','shi'],['ス','su'],['セ','se'],['ソ','so']]},
+  {id:'t', label:'タ行 t-row', items:[['タ','ta'],['チ','chi'],['ツ','tsu'],['テ','te'],['ト','to']]},
+  {id:'n', label:'ナ行 n-row', items:[['ナ','na'],['ニ','ni'],['ヌ','nu'],['ネ','ne'],['ノ','no']]},
+  {id:'h', label:'ハ行 h-row', items:[['ハ','ha'],['ヒ','hi'],['フ','fu'],['ヘ','he'],['ホ','ho']]},
+  {id:'m', label:'マ行 m-row', items:[['マ','ma'],['ミ','mi'],['ム','mu'],['メ','me'],['モ','mo']]},
+  {id:'y', label:'ヤ行 y-row', items:[['ヤ','ya'],['ユ','yu'],['ヨ','yo']]},
+  {id:'r', label:'ラ行 r-row', items:[['ラ','ra'],['リ','ri'],['ル','ru'],['レ','re'],['ロ','ro']]},
+  {id:'wn', label:'ワ・ン', items:[['ワ','wa'],['ヲ','wo'],['ン','n']]},
+  {id:'g', label:'ガ行 dakuten', items:[['ガ','ga'],['ギ','gi'],['グ','gu'],['ゲ','ge'],['ゴ','go']]},
+  {id:'z', label:'ザ行 dakuten', items:[['ザ','za'],['ジ','ji'],['ズ','zu'],['ゼ','ze'],['ゾ','zo']]},
+  {id:'d', label:'ダ行 dakuten', items:[['ダ','da'],['ヂ','ji'],['ヅ','zu'],['デ','de'],['ド','do']]},
+  {id:'b', label:'バ行 dakuten', items:[['バ','ba'],['ビ','bi'],['ブ','bu'],['ベ','be'],['ボ','bo']]},
+  {id:'p', label:'パ行 handakuten', items:[['パ','pa'],['ピ','pi'],['プ','pu'],['ペ','pe'],['ポ','po']]},
+  {id:'youon', label:'Youon combinations', optional:true, items:[
+    ['キャ','kya'],['キュ','kyu'],['キョ','kyo'],['シャ','sha'],['シュ','shu'],['ショ','sho'],
+    ['チャ','cha'],['チュ','chu'],['チョ','cho'],['ニャ','nya'],['ニュ','nyu'],['ニョ','nyo'],
+    ['ヒャ','hya'],['ヒュ','hyu'],['ヒョ','hyo'],['ミャ','mya'],['ミュ','myu'],['ミョ','myo'],
+    ['リャ','rya'],['リュ','ryu'],['リョ','ryo'],['ギャ','gya'],['ギュ','gyu'],['ギョ','gyo'],
+    ['ジャ','ja'],['ジュ','ju'],['ジョ','jo'],['ビャ','bya'],['ビュ','byu'],['ビョ','byo'],
+    ['ピャ','pya'],['ピュ','pyu'],['ピョ','pyo']
+  ]}
+];
+
+/* Kanji is intentionally a stub, not an implementation. Kanji need a
+   genuinely different card model (multiple readings, meanings) that
+   doesn't fit the kana row/reading template — registering it here with
+   enabled:false proves the extension point works without shipping a
+   half-right kanji experience. Flip enabled:true once rows+cards exist. */
+const SCRIPT_DEFS = {
+  hiragana: { id:'hiragana', label:'Hiragana', enabled:true,  hasYouon:true,  rows:HIRAGANA_ROWS },
+  katakana: { id:'katakana', label:'Katakana', enabled:true,  hasYouon:true,  rows:KATAKANA_ROWS },
+  kanji:    { id:'kanji',    label:'Kanji',    enabled:false, hasYouon:false, rows:[], comingSoon:true }
+};
+const SCRIPT_ORDER = ['hiragana','katakana','kanji'];
+const ENABLED_SCRIPTS = SCRIPT_ORDER.filter(id=>SCRIPT_DEFS[id].enabled);
+
+/* Every character across every enabled script, flattened, each tagged
+   with which script it belongs to. Kana text itself is unique per script
+   (か and カ are different Unicode characters), so card keys never collide
+   across scripts even without an explicit script prefix — but cards still
+   carry .script explicitly for filtering. */
+const ALL_KANA_LIST = [];
+ENABLED_SCRIPTS.forEach(scriptId=>{
+  const def = SCRIPT_DEFS[scriptId];
+  def.rows.forEach((row, ri)=>{
+    row.items.forEach(([kana, romaji])=>{
+      ALL_KANA_LIST.push({ kana, romaji, script:scriptId, rowId:row.id, rowIndex:ri, rowLabel:row.label, optional:!!row.optional });
+    });
+  });
+});
+function kanaListForScript(scriptId){ return ALL_KANA_LIST.filter(k=>k.script===scriptId); }
+
 /* Kunrei/Nihon-shiki alternates that are genuinely ambiguous with another
    character's Hepburn reading get scoped to the specific kana rather than
-   the romaji string, since じ/ぢ and ず/づ share a Hepburn romaji (ji/zu)
-   but do NOT share the same Kunrei-shiki alternate (じ=zi, ぢ=di; ず has
-   no alternate, づ=du). Applying these as a blanket romaji-level pair
-   would incorrectly accept "di" for じ or "du" for ず. */
-const KANA_SPECIFIC_ALTS = { 'じ':['zi'], 'ぢ':['di'], 'づ':['du'] };
+   the romaji string, since じ/ぢ (and their katakana equivalents ジ/ヂ)
+   share a Hepburn romaji (ji) but do NOT share the same Kunrei-shiki
+   alternate (じ/ジ=zi, ぢ/ヂ=di). Applying these as a blanket romaji-level
+   pair would incorrectly accept "di" for じ or "du" for ず. */
+const KANA_SPECIFIC_ALTS = {
+  'じ':['zi'], 'ぢ':['di'], 'づ':['du'],
+  'ジ':['zi'], 'ヂ':['di'], 'ヅ':['du']
+};
 
 function altSpellings(r, kana){
   const pairs = [['shi','si'],['chi','ti'],['tsu','tu'],['fu','hu'],
@@ -522,23 +637,16 @@ function altSpellings(r, kana){
   return [...set];
 }
 
-/* Flat list of every kana with its row index for ordering/unlocking */
-const KANA_LIST = [];
-ROWS.forEach((row, ri)=>{
-  row.items.forEach(([kana, romaji])=>{
-    KANA_LIST.push({ kana, romaji, rowId: row.id, rowIndex: ri, rowLabel: row.label, optional: !!row.optional });
-  });
-});
-
 /* ============================= SETTINGS ============================= */
 const DEFAULT_SETTINGS = {
-  newPerDay: 5,
+  newPerDay: 5,             // per script — each script gets its own budget of this size
   reviewCap: 40,
   includeYouon: false,
-  directionMode: 'both',   // 'both' | 'recognition' | 'production'
-  kanaInputMode: 'draw',   // 'draw' (freehand, self-graded) | 'select' (tap grid)
-  gridScope: 'unlocked',   // 'unlocked' (only unlocked rows) | 'all' (every hiragana)
-  theme: 'dark'            // 'dark' | 'light'
+  directionMode: 'both',    // 'both' | 'recognition' | 'production'
+  kanaInputMode: 'draw',    // 'draw' (freehand, self-graded) | 'select' (tap grid)
+  gridScope: 'unlocked',    // 'unlocked' (only unlocked rows) | 'all' (every character in that script)
+  theme: 'dark',            // 'dark' | 'light'
+  studyScript: 'hiragana'   // 'hiragana' | 'katakana' | 'mixed'
 };
 
 /* ---------- Theme ---------- */
@@ -548,27 +656,70 @@ function applyTheme(){
 }
 
 /* ============================= STATE ============================= */
-/* No browser storage is used (this file can run inside Claude's in-chat
-   preview, where localStorage is not reliable). Progress lives in memory
-   and is saved/loaded as a JSON file — which also makes it trivially
-   portable between devices. */
-let state = {
-  settings: Object.assign({}, DEFAULT_SETTINGS),
-  cards: {},          // key: "kana|direction" -> card record
-  newIntroducedToday: 0,
-  lastActiveDate: todayStr(),
-  totals: { reviews:0, correct:0 },
-  forcedRows: [],      // deprecated, retained only for backward-compatible imports
-  rowOverrides: {},    // row id -> 'unlock' | 'lock', manual visibility toggle
-  createdAt: Date.now()
-};
-
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 
+function freshState(){
+  return {
+    settings: Object.assign({}, DEFAULT_SETTINGS),
+    cards: {},               // key: "kana|direction" -> card record (each tagged with .script)
+    newIntroducedToday: { hiragana:0, katakana:0 },
+    lastActiveDate: todayStr(),
+    totals: { reviews:0, correct:0 },
+    rowOverrides: { hiragana:{}, katakana:{} },  // per script: rowId -> 'unlock' | 'lock'
+    createdAt: Date.now()
+  };
+}
+
+let state = freshState();
+
+/* One shared migration path for both the autosave-load and file-import
+   routes, so old saved progress (from before katakana existed) upgrades
+   consistently instead of each load path handling it slightly differently
+   — that kind of divergence is exactly what caused bugs before. */
+function migrateState(raw){
+  if(!raw || typeof raw !== 'object') return freshState();
+
+  raw.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings || {});
+
+  if(!raw.rowOverrides){
+    raw.rowOverrides = { hiragana:{}, katakana:{} };
+  } else if(!('hiragana' in raw.rowOverrides) && !('katakana' in raw.rowOverrides)){
+    /* Old flat shape from before multi-script support: {rowId:'lock'/'unlock'},
+       implicitly all-hiragana since that was the only script that existed. */
+    raw.rowOverrides = { hiragana: raw.rowOverrides, katakana:{} };
+  } else {
+    if(!raw.rowOverrides.hiragana) raw.rowOverrides.hiragana = {};
+    if(!raw.rowOverrides.katakana) raw.rowOverrides.katakana = {};
+  }
+
+  if(Array.isArray(raw.forcedRows)){
+    /* Even older deprecated shape, predating the lock/unlock toggle itself. */
+    raw.forcedRows.forEach(id => { if(!(id in raw.rowOverrides.hiragana)) raw.rowOverrides.hiragana[id] = 'unlock'; });
+    delete raw.forcedRows;
+  }
+
+  if(typeof raw.newIntroducedToday === 'number'){
+    raw.newIntroducedToday = { hiragana: raw.newIntroducedToday, katakana: 0 };
+  } else if(!raw.newIntroducedToday){
+    raw.newIntroducedToday = { hiragana:0, katakana:0 };
+  } else {
+    if(typeof raw.newIntroducedToday.hiragana !== 'number') raw.newIntroducedToday.hiragana = 0;
+    if(typeof raw.newIntroducedToday.katakana !== 'number') raw.newIntroducedToday.katakana = 0;
+  }
+
+  if(!raw.cards) raw.cards = {};
+  Object.values(raw.cards).forEach(c=>{
+    if(!c.script) c.script = 'hiragana'; // every card predating katakana was hiragana
+  });
+
+  if(!raw.totals) raw.totals = { reviews:0, correct:0 };
+  if(!raw.lastActiveDate) raw.lastActiveDate = todayStr();
+  if(!raw.createdAt) raw.createdAt = Date.now();
+
+  return raw;
+}
+
 /* ---------- Autosave (localStorage) ---------- */
-/* This runs as an installed, offline PWA now (not inside a chat preview),
-   so real browser storage is the right call: autosave on every change,
-   with manual export/import kept as your backup + cross-device path. */
 const STORAGE_KEY = 'kanaTrainerState';
 
 function persistState(){
@@ -584,7 +735,7 @@ function loadPersistedState(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return null;
     const parsed = JSON.parse(raw);
-    if(parsed && parsed.cards && parsed.settings) return parsed;
+    if(parsed && parsed.cards && parsed.settings) return migrateState(parsed);
   }catch(err){ /* ignore, fall back to fresh state */ }
   return null;
 }
@@ -595,7 +746,7 @@ function ensureCard(item, direction){
   const key = cardKey(item.kana, direction);
   if(!state.cards[key]){
     state.cards[key] = {
-      kana:item.kana, romaji:item.romaji, rowId:item.rowId, rowIndex:item.rowIndex,
+      kana:item.kana, romaji:item.romaji, script:item.script, rowId:item.rowId, rowIndex:item.rowIndex,
       direction,
       phase:'new',        // new -> learning -> review (or relearning)
       interval:0,          // days, once in review
@@ -611,35 +762,34 @@ function ensureCard(item, direction){
   return state.cards[key];
 }
 
-/* Reset the daily new-card counter if the date has rolled over */
+/* Reset each script's daily new-card counter if the date has rolled over */
 function rolloverDay(){
   const t = todayStr();
   if(state.lastActiveDate !== t){
     state.lastActiveDate = t;
-    state.newIntroducedToday = 0;
+    ENABLED_SCRIPTS.forEach(s=> state.newIntroducedToday[s] = 0);
   }
 }
 
-/* Which rows are unlocked: a row unlocks once every card (both directions,
-   respecting current direction mode) in all previously-unlocked rows has
-   graduated out of 'new'/'learning' into 'review' at least once. This
-   caps how much the learner juggles at once (cognitive load) and only
-   widens the free-selection grid as competence grows. */
-function naturallyUnlockedRowIds(){
-  const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
+/* Which rows are unlocked in a given script: a row unlocks once every card
+   (both directions, respecting current direction mode) in all previously-
+   unlocked rows of THAT SCRIPT has graduated into 'review' at least once.
+   Purely mastery-based, unaffected by manual overrides, so progress-based
+   unlocking keeps working even if a row is toggled off for a while. */
+function naturallyUnlockedRowIds(scriptId){
+  const def = SCRIPT_DEFS[scriptId];
+  const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
   const directions = directionsForMode();
+  const items = kanaListForScript(scriptId);
 
-  /* Natural gate: purely based on mastery, unaffected by manual overrides,
-     so progress-based unlocking keeps working even if a row is toggled
-     off for a while. */
   const natural = new Set();
   let sequentialOpen = true;
   for(let i=0;i<activeRows.length;i++){
     const row = activeRows[i];
     if(!sequentialOpen) continue;
     natural.add(row.id);
-    const items = KANA_LIST.filter(k => k.rowId === row.id);
-    const allGraduated = items.every(item =>
+    const rowItems = items.filter(k => k.rowId === row.id);
+    const allGraduated = rowItems.every(item =>
       directions.every(dir => {
         const c = state.cards[cardKey(item.kana, dir)];
         return c && c.phase === 'review';
@@ -650,15 +800,15 @@ function naturallyUnlockedRowIds(){
   return natural;
 }
 
-function unlockedRowIndexes(){
-  const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
-  const natural = naturallyUnlockedRowIds();
+function unlockedRowIndexes(scriptId){
+  const def = SCRIPT_DEFS[scriptId];
+  const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+  const natural = naturallyUnlockedRowIds(scriptId);
+  const overrides = (state.rowOverrides && state.rowOverrides[scriptId]) || {};
 
-  /* Manual override: 'unlock' forces a row in, 'lock' forces it out,
-     no override falls back to the natural gate above. */
   const unlocked = new Set();
   activeRows.forEach(row=>{
-    const override = state.rowOverrides ? state.rowOverrides[row.id] : undefined;
+    const override = overrides[row.id];
     if(override === 'unlock') unlocked.add(row.id);
     else if(override === 'lock') { /* stays out */ }
     else if(natural.has(row.id)) unlocked.add(row.id);
@@ -672,27 +822,35 @@ function directionsForMode(){
   return ['recognition','production'];
 }
 
-function activeKanaList(){
-  const unlocked = unlockedRowIndexes();
-  return KANA_LIST.filter(k => (!k.optional || state.settings.includeYouon) && unlocked.has(k.rowId));
+function activeKanaList(scriptId){
+  const unlocked = unlockedRowIndexes(scriptId);
+  return kanaListForScript(scriptId).filter(k => (!k.optional || state.settings.includeYouon) && unlocked.has(k.rowId));
 }
 
-/* じ/ぢ and ず/づ share an identical Hepburn reading — genuinely ambiguous
-   when only the romaji is shown, since there's no way to tell which was
-   meant from the sound alone. Used to accept either as correct in select
-   mode, and to flag the ambiguity in the prompt so self-graders in draw
-   mode know either is fine too. */
+/* じ/ぢ (and katakana ジ/ヂ) share an identical Hepburn reading — genuinely
+   ambiguous when only the romaji is shown. Scoped to same-script matches
+   only: か and カ sharing "ka" is just the normal hiragana/katakana
+   relationship, not a genuine ambiguity worth flagging. */
 function homophonesOf(kana){
-  const item = KANA_LIST.find(k=>k.kana===kana);
+  const item = ALL_KANA_LIST.find(k=>k.kana===kana);
   if(!item) return [];
-  return KANA_LIST.filter(k=>k.romaji===item.romaji && k.kana!==kana).map(k=>k.kana);
+  return ALL_KANA_LIST.filter(k=>k.script===item.script && k.romaji===item.romaji && k.kana!==kana).map(k=>k.kana);
 }
 
-function gridPool(){
+/* Tap-grid decoys always come from the tested character's own script,
+   regardless of whether the session itself is single-script or mixed —
+   offering katakana decoys for a hiragana question would add a confusing
+   axis of difficulty nobody asked for. */
+function gridPool(card){
+  const scriptId = card.script;
   if(state.settings.gridScope === 'all'){
-    return KANA_LIST.filter(k => !k.optional || state.settings.includeYouon);
+    return kanaListForScript(scriptId).filter(k => !k.optional || state.settings.includeYouon);
   }
-  return activeKanaList();
+  return activeKanaList(scriptId);
+}
+
+function isForceUnlocked(scriptId, rowId){
+  return !!(state.rowOverrides && state.rowOverrides[scriptId] && state.rowOverrides[scriptId][rowId] === 'unlock');
 }
 
 /* ============================= SCHEDULING ============================= */
@@ -754,17 +912,26 @@ function graded(card, correct, latencyMs){
 function randBetween(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
 
 /* ============================= SESSION ============================= */
-let session = null; // { queue:[card,...], pos, correctCount, total, currentStart }
+let session = null; // { queue:[card,...], pos, correctCount, total, ... }
 
-function isForceUnlocked(rowId){
-  return !!(state.rowOverrides && state.rowOverrides[rowId] === 'unlock');
+function scriptsForMode(scriptMode){
+  return scriptMode === 'mixed' ? ENABLED_SCRIPTS.slice() : [scriptMode];
 }
 
-function buildSession(unlimited){
+/* Mixed mode deliberately never introduces new characters — only reviews
+   what's already unlocked across both scripts. New-character introduction
+   always happens inside a specific script's own mode, so there's never an
+   ambiguous "which script's new-card budget wins today" question. */
+function buildSession(unlimited, scriptMode){
   rolloverDay();
-  const active = activeKanaList();
   const directions = directionsForMode();
-  active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+  const scripts = scriptsForMode(scriptMode);
+
+  const activeByScript = {};
+  scripts.forEach(scriptId=>{
+    activeByScript[scriptId] = activeKanaList(scriptId);
+    activeByScript[scriptId].forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+  });
 
   const now = Date.now();
   const dueReview = [];
@@ -772,10 +939,11 @@ function buildSession(unlimited){
   const freshNew = [];
 
   Object.values(state.cards).forEach(c=>{
-    if(!active.find(a=>a.kana===c.kana)) return;
+    if(!scripts.includes(c.script)) return;
+    if(!activeByScript[c.script].find(a=>a.kana===c.kana)) return;
     if(!directions.includes(c.direction)) return;
     if(c.phase === 'review' && c.dueDate <= now) dueReview.push(c);
-    else if((c.phase === 'learning' || c.phase === 'relearning')) dueLearning.push(c);
+    else if(c.phase === 'learning' || c.phase === 'relearning') dueLearning.push(c);
     else if(c.phase === 'new') freshNew.push(c);
   });
 
@@ -783,15 +951,19 @@ function buildSession(unlimited){
   shuffle(freshNew);
   const reviewSlice = unlimited ? dueReview : dueReview.slice(0, state.settings.reviewCap);
 
-  /* Manually force-unlocked rows bypass the daily new-card pacing cap
-     entirely — forcing a row open is already an explicit request to study
-     it now, so it shouldn't then get silently blocked by the same budget
-     that governs normal progressive unlocking. */
-  const forcedNew = freshNew.filter(c=>isForceUnlocked(c.rowId));
-  const naturalNew = freshNew.filter(c=>!isForceUnlocked(c.rowId));
-  const newBudget = unlimited ? naturalNew.length : Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
-  const naturalSlice = naturalNew.slice(0, newBudget);
-  const newSlice = forcedNew.concat(naturalSlice);
+  let newSlice = [];
+  const naturalSliceByScript = {};
+  if(scriptMode !== 'mixed'){
+    /* Manually force-unlocked rows bypass the daily new-card pacing cap
+       entirely for their own script — forcing a row open is already an
+       explicit request to study it now. */
+    const forcedNew = freshNew.filter(c=>isForceUnlocked(c.script, c.rowId));
+    const naturalNew = freshNew.filter(c=>!isForceUnlocked(c.script, c.rowId));
+    const newBudget = unlimited ? naturalNew.length : Math.max(0, state.settings.newPerDay - state.newIntroducedToday[scriptMode]);
+    const naturalSlice = naturalNew.slice(0, newBudget);
+    newSlice = forcedNew.concat(naturalSlice);
+    naturalSliceByScript[scriptMode] = naturalSlice;
+  }
 
   const queue = [];
   dueLearning.forEach(c=>queue.push(c));
@@ -799,12 +971,14 @@ function buildSession(unlimited){
   newSlice.forEach(c=>queue.push(c));
   shuffle(queue);
 
-  return { queue, pos:0, correctCount:0, total:queue.length, newSlice:naturalSlice };
+  return { queue, pos:0, correctCount:0, total:queue.length, naturalSliceByScript };
 }
 
-function startSession(unlimited){
-  session = buildSession(unlimited);
-  session.newSlice.forEach(()=> state.newIntroducedToday++);
+function startSession(unlimited, scriptMode){
+  session = buildSession(unlimited, scriptMode);
+  Object.entries(session.naturalSliceByScript).forEach(([scriptId, list])=>{
+    state.newIntroducedToday[scriptId] += list.length;
+  });
   persistState();
   setRoute('study');
 }
@@ -814,26 +988,34 @@ function startSession(unlimited){
    normal scheduling data (same as answering a due card) — an early correct
    answer is still real evidence of recall strength, it just isn't gated by
    the calendar. New (never-seen) characters are excluded here UNLESS their
-   row was manually force-unlocked, in which case pacing has already been
-   explicitly overridden and they should be practiceable immediately too. */
-function buildFreeStudySession(rowId){
-  const active = activeKanaList();
+   row was manually force-unlocked. rowId filtering only makes sense within
+   a single script (row ids like 'k'/'s' collide across scripts), so it's
+   ignored in mixed mode — mixed free study is "everything studied so far". */
+function buildFreeStudySession(scriptMode, rowId){
+  rolloverDay();
   const directions = directionsForMode();
-  active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+  const scripts = scriptsForMode(scriptMode);
+
+  const activeByScript = {};
+  scripts.forEach(scriptId=>{
+    activeByScript[scriptId] = activeKanaList(scriptId);
+    activeByScript[scriptId].forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+  });
 
   const pool = Object.values(state.cards).filter(c=>{
-    if(c.phase === 'new' && !isForceUnlocked(c.rowId)) return false;
-    if(!active.find(a=>a.kana===c.kana)) return false;
+    if(!scripts.includes(c.script)) return false;
+    if(c.phase === 'new' && !isForceUnlocked(c.script, c.rowId)) return false;
+    if(!activeByScript[c.script].find(a=>a.kana===c.kana)) return false;
     if(!directions.includes(c.direction)) return false;
-    if(rowId && rowId !== 'all' && c.rowId !== rowId) return false;
+    if(scriptMode !== 'mixed' && rowId && rowId !== 'all' && c.rowId !== rowId) return false;
     return true;
   });
   shuffle(pool);
-  return { queue:pool, pos:0, correctCount:0, total:pool.length, newSlice:[] };
+  return { queue:pool, pos:0, correctCount:0, total:pool.length, naturalSliceByScript:{} };
 }
 
-function startFreeStudy(rowId){
-  session = buildFreeStudySession(rowId);
+function startFreeStudy(scriptMode, rowId){
+  session = buildFreeStudySession(scriptMode, rowId);
   setRoute('study');
 }
 
@@ -844,28 +1026,45 @@ function shuffle(arr){
   }
 }
 
-function dueCount(){
+function dueCount(scriptMode){
   rolloverDay();
-  const active = activeKanaList();
   const directions = directionsForMode();
-  active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
   const now = Date.now();
+  const scripts = scriptsForMode(scriptMode);
+
   let n = 0;
-  Object.values(state.cards).forEach(c=>{
-    if(!active.find(a=>a.kana===c.kana)) return;
-    if(!directions.includes(c.direction)) return;
-    if(c.phase==='review' && c.dueDate<=now) n++;
-    else if(c.phase==='learning' || c.phase==='relearning') n++;
+  let forcedFreshTotal = 0;
+  let naturalFreshTotal = 0;
+
+  scripts.forEach(scriptId=>{
+    const active = activeKanaList(scriptId);
+    active.forEach(item => directions.forEach(dir => ensureCard(item, dir)));
+
+    Object.values(state.cards).forEach(c=>{
+      if(c.script !== scriptId) return;
+      if(!active.find(a=>a.kana===c.kana)) return;
+      if(!directions.includes(c.direction)) return;
+      if(c.phase==='review' && c.dueDate<=now) n++;
+      else if(c.phase==='learning' || c.phase==='relearning') n++;
+    });
+
+    if(scriptMode !== 'mixed'){
+      const freshCards = Object.values(state.cards).filter(c=>{
+        if(c.script !== scriptId) return false;
+        if(!active.find(a=>a.kana===c.kana)) return false;
+        if(!directions.includes(c.direction)) return false;
+        return c.phase==='new';
+      });
+      const forced = freshCards.filter(c=>isForceUnlocked(c.script, c.rowId)).length;
+      forcedFreshTotal += forced;
+      naturalFreshTotal += (freshCards.length - forced);
+    }
   });
-  const freshCards = Object.values(state.cards).filter(c=>{
-    if(!active.find(a=>a.kana===c.kana)) return false;
-    if(!directions.includes(c.direction)) return false;
-    return c.phase==='new';
-  });
-  const forcedFreshCount = freshCards.filter(c=>isForceUnlocked(c.rowId)).length;
-  const naturalFreshCount = freshCards.length - forcedFreshCount;
-  const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday);
-  return n + forcedFreshCount + Math.min(newBudget, naturalFreshCount);
+
+  if(scriptMode === 'mixed') return n; // mixed never counts new cards — review-only by design
+
+  const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday[scriptMode]);
+  return n + forcedFreshTotal + Math.min(newBudget, naturalFreshTotal);
 }
 
 /* ============================= RENDERING ============================= */
@@ -884,7 +1083,7 @@ function setRoute(r){
 
 const menuBtn = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
-function openMenu(){ menuPanel.hidden = false; menuBtn.setAttribute('aria-expanded','true'); }
+function openMenu(){ closeModePanel(); menuPanel.hidden = false; menuBtn.setAttribute('aria-expanded','true'); }
 function closeMenu(){ menuPanel.hidden = true; menuBtn.setAttribute('aria-expanded','false'); }
 menuBtn.onclick = (e)=>{ e.stopPropagation(); menuPanel.hidden ? openMenu() : closeMenu(); };
 document.querySelectorAll('.menu-panel button[data-route]').forEach(b=>{
@@ -892,6 +1091,36 @@ document.querySelectorAll('.menu-panel button[data-route]').forEach(b=>{
 });
 document.addEventListener('click', (e)=>{
   if(!menuPanel.hidden && !menuPanel.contains(e.target) && e.target !== menuBtn) closeMenu();
+});
+
+/* ---------- Header mode switcher ---------- */
+const modePillBtn = document.getElementById('modePillBtn');
+const modePanel = document.getElementById('modePanel');
+function openModePanel(){ closeMenu(); modePanel.hidden = false; modePillBtn.setAttribute('aria-expanded','true'); }
+function closeModePanel(){ modePanel.hidden = true; modePillBtn.setAttribute('aria-expanded','false'); }
+modePillBtn.onclick = (e)=>{ e.stopPropagation(); modePanel.hidden ? openModePanel() : closeModePanel(); };
+document.addEventListener('click', (e)=>{
+  if(!modePanel.hidden && !modePanel.contains(e.target) && e.target !== modePillBtn) closeModePanel();
+});
+function modeLabel(scriptMode){
+  if(scriptMode === 'mixed') return 'Mixed';
+  return SCRIPT_DEFS[scriptMode] ? SCRIPT_DEFS[scriptMode].label : scriptMode;
+}
+function updateModePill(){
+  const lbl = document.getElementById('modePillLabel');
+  if(lbl) lbl.textContent = modeLabel(state.settings.studyScript);
+  document.querySelectorAll('#modePanel [data-script]').forEach(b=>{
+    b.classList.toggle('active', b.dataset.script === state.settings.studyScript);
+  });
+}
+document.querySelectorAll('#modePanel [data-script]').forEach(b=>{
+  b.onclick = ()=>{
+    state.settings.studyScript = b.dataset.script;
+    persistState();
+    updateModePill();
+    closeModePanel();
+    if(route === 'home') renderHome();
+  };
 });
 
 function render(){
@@ -903,45 +1132,72 @@ function render(){
   else if(route==='end') renderSessionEnd();
 }
 
-function renderHome(){
-  rolloverDay();
-  const graduated = Object.values(state.cards).filter(c=>c.phase==='review').length;
-  const total = Object.values(state.cards).length;
-  const due = dueCount();
+/* ---------- Study tab ---------- */
+function rowProgressHtml(scriptId){
+  const def = SCRIPT_DEFS[scriptId];
+  const unlocked = unlockedRowIndexes(scriptId);
+  const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+  const directions = directionsForMode();
+  const items = kanaListForScript(scriptId);
 
-  const unlocked = unlockedRowIndexes();
-  const activeRows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
-
-  let rowsHtml = '';
-  activeRows.forEach(row=>{
+  return activeRows.map(row=>{
     const isUnlocked = unlocked.has(row.id);
-    const items = KANA_LIST.filter(k=>k.rowId===row.id);
-    const directions = directionsForMode();
-    let done = 0, denom = items.length*directions.length;
-    items.forEach(item=> directions.forEach(dir=>{
+    const rowItems = items.filter(k=>k.rowId===row.id);
+    let done = 0, denom = rowItems.length*directions.length;
+    rowItems.forEach(item=> directions.forEach(dir=>{
       const c = state.cards[cardKey(item.kana,dir)];
       if(c && c.phase==='review') done++;
     }));
     const pct = denom ? Math.round(100*done/denom) : 0;
-    rowsHtml += `<div class="row-line">
+    return `<div class="row-line">
       <span class="rk ${row.optional?'label':''} ${isUnlocked?'':'locked'}">${row.optional ? row.label : row.items.map(i=>i[0]).join('')}</span>
       <div class="bar"><div class="fill" style="width:${isUnlocked?pct:0}%"></div></div>
       <span class="pct">${isUnlocked? pct+'%' : '🔒'}</span>
     </div>`;
-  });
+  }).join('');
+}
 
-  const introducedCount = Object.values(state.cards).filter(c=>c.phase!=='new').length;
-  const unlockedRowsForSelect = activeRows.filter(r=>unlocked.has(r.id));
-  const freeStudyOptions = [{id:'all', label:'All studied characters'}].concat(
-    unlockedRowsForSelect.map(r=>({ id:r.id, label:r.optional ? r.label : r.items.map(i=>i[0]).join('') }))
-  );
+function renderHome(){
+  rolloverDay();
+  const scriptMode = state.settings.studyScript;
+  const due = dueCount(scriptMode);
+
+  const graduated = Object.values(state.cards).filter(c=>c.phase==='review' && (scriptMode==='mixed' || c.script===scriptMode)).length;
+  const total = Object.values(state.cards).filter(c=> scriptMode==='mixed' || c.script===scriptMode).length;
+
+  let rowProgressSection;
+  let freeStudyOptions;
+  const introducedCount = Object.values(state.cards).filter(c=> c.phase!=='new' && (scriptMode==='mixed' || c.script===scriptMode)).length;
+
+  if(scriptMode === 'mixed'){
+    rowProgressSection = ENABLED_SCRIPTS.map(scriptId=>`
+      <div class="row-progress">
+        <h3>${SCRIPT_DEFS[scriptId].label} rows</h3>
+        ${rowProgressHtml(scriptId)}
+      </div>`).join('');
+    freeStudyOptions = [{id:'all', label:'All studied characters (both scripts)'}];
+  } else {
+    rowProgressSection = `<div class="row-progress"><h3>Row progress</h3>${rowProgressHtml(scriptMode)}</div>`;
+    const def = SCRIPT_DEFS[scriptMode];
+    const unlocked = unlockedRowIndexes(scriptMode);
+    const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+    const unlockedRowsForSelect = activeRows.filter(r=>unlocked.has(r.id));
+    freeStudyOptions = [{id:'all', label:'All studied characters'}].concat(
+      unlockedRowsForSelect.map(r=>({ id:r.id, label:r.optional ? r.label : r.items.map(i=>i[0]).join('') }))
+    );
+  }
+
+  const startLabel = scriptMode === 'mixed'
+    ? (due===0 ? 'Nothing due — check back later' : 'Start mixed review ('+due+' cards)')
+    : (due===0 ? 'Nothing due — check back later' : 'Start session ('+due+' cards)');
 
   $main.innerHTML = `
     <div class="summary-row">
       <div class="stat-block"><div class="num">${due}</div><div class="lab">cards due now</div></div>
       <div class="stat-block"><div class="num">${graduated}/${total||0}</div><div class="lab">graduated to review</div></div>
     </div>
-    <button class="start-btn" id="startBtn" ${due===0?'disabled':''}>${due===0 ? 'Nothing due — check back later' : 'Start session ('+due+' cards)'}</button>
+    <button class="start-btn" id="startBtn" ${due===0?'disabled':''}>${startLabel}</button>
+    ${scriptMode==='mixed' ? `<p class="help">Mixed mode reviews whatever's already unlocked in both scripts — it never introduces new characters. Switch to Hiragana or Katakana mode to learn new ones.</p>` : ''}
     ${introducedCount > 0 ? `
     <div class="free-study-wrap">
       <button class="muted-btn" id="freeStudyToggle">Free study</button>
@@ -949,20 +1205,18 @@ function renderHome(){
         ${freeStudyOptions.map(o=>`<button data-scope="${o.id}">${o.label}</button>`).join('')}
       </div>
     </div>` : ''}
-    <div class="row-progress">
-      <h3>Row progress</h3>
-      ${rowsHtml}
-    </div>
+    ${rowProgressSection}
   `;
+
   const btn = document.getElementById('startBtn');
-  if(btn) btn.onclick = ()=> startSession(false);
+  if(btn) btn.onclick = ()=> startSession(false, scriptMode);
 
   const freeToggle = document.getElementById('freeStudyToggle');
   const freeMenu = document.getElementById('freeStudyMenu');
   if(freeToggle){
     freeToggle.onclick = (e)=>{ e.stopPropagation(); freeMenu.hidden = !freeMenu.hidden; };
     freeMenu.querySelectorAll('[data-scope]').forEach(b=>{
-      b.onclick = ()=> startFreeStudy(b.dataset.scope);
+      b.onclick = ()=> startFreeStudy(scriptMode, b.dataset.scope);
     });
     document.addEventListener('click', (e)=>{
       if(!freeMenu.hidden && !freeMenu.contains(e.target) && e.target !== freeToggle) freeMenu.hidden = true;
@@ -1011,7 +1265,7 @@ function renderCard(){
       <div class="feedback" id="feedback"></div>
     `;
   } else {
-    const pool = gridPool();
+    const pool = gridPool(card);
     const options = pool.slice();
     shuffle(options);
     body = `
@@ -1066,10 +1320,6 @@ function renderCard(){
     }
     document.querySelectorAll('.grid button, #submitBtn, #romajiInput, #clearBtn, #revealBtn, #selfYes, #selfNo').forEach(el=> el.disabled = true);
     if(drawMode){
-      /* Self-grading is already a deliberate two-step choice (reveal, then
-         judge yourself) — a third "Continue" tap on top of that is just
-         friction, so advance automatically after a brief moment to register
-         the feedback. */
       setTimeout(renderCard, 500);
     } else {
       const cont = document.createElement('button');
@@ -1181,7 +1431,8 @@ function renderCard(){
 
 function renderSessionEnd(){
   const pct = session.total ? Math.round(100*session.correctCount/session.total) : 0;
-  const moreDue = dueCount();
+  const scriptMode = state.settings.studyScript;
+  const moreDue = dueCount(scriptMode);
   $main.innerHTML = `
     <div class="session-end">
       <div class="num">${pct}%</div>
@@ -1191,12 +1442,20 @@ function renderSessionEnd(){
     </div>
   `;
   const continueBtn = document.getElementById('continueBtn');
-  if(continueBtn) continueBtn.onclick = ()=> startSession(true);
+  if(continueBtn) continueBtn.onclick = ()=> startSession(true, scriptMode);
   document.getElementById('doneBtn').onclick = ()=>{ session=null; setRoute('home'); };
 }
 
+/* ---------- Answer key ---------- */
 function renderReference(){
-  const rows = ROWS.filter(r => !r.optional || state.settings.includeYouon);
+  const current = (state.settings.studyScript === 'mixed' || !SCRIPT_DEFS[state.settings.studyScript] || !SCRIPT_DEFS[state.settings.studyScript].enabled)
+    ? 'hiragana' : state.settings.studyScript;
+  renderReferenceFor(current);
+}
+
+function renderReferenceFor(scriptId){
+  const def = SCRIPT_DEFS[scriptId];
+  const rows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
   const sections = rows.map(row=>{
     const cells = row.items.map(([kana, romaji])=>
       `<button class="ref-cell" data-kana="${kana}"><div class="k jp">${kana}</div><div class="r">${romaji}</div></button>`
@@ -1207,19 +1466,28 @@ function renderReference(){
     </div>`;
   }).join('');
 
+  const tabsHtml = ENABLED_SCRIPTS.map(id=>
+    `<button data-refscript="${id}" class="${id===scriptId?'active':''}">${SCRIPT_DEFS[id].label}</button>`
+  ).join('');
+
   $main.innerHTML = `
+    <div class="choice-row" style="margin-bottom:16px;">${tabsHtml}</div>
     <div class="ref-detail" id="refDetail">
       <p class="help" style="margin:0;">Tap a character to see every spelling accepted when typing.</p>
     </div>
     ${sections}
   `;
 
+  document.querySelectorAll('[data-refscript]').forEach(b=>{
+    b.onclick = ()=> renderReferenceFor(b.dataset.refscript);
+  });
+
   document.querySelectorAll('.ref-cell').forEach(btn=>{
     btn.onclick = ()=>{
       document.querySelectorAll('.ref-cell.active').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       const kana = btn.dataset.kana;
-      const item = KANA_LIST.find(k=>k.kana===kana);
+      const item = ALL_KANA_LIST.find(k=>k.kana===kana);
       const accepted = altSpellings(item.romaji, kana);
       const alternates = accepted.filter(a=>a!==item.romaji);
       const detail = document.getElementById('refDetail');
@@ -1233,18 +1501,21 @@ function renderReference(){
   });
 }
 
+/* ---------- Stats ---------- */
 function renderStats(){
   const rows = Object.values(state.cards)
     .filter(c=>c.phase!=='new')
-    .sort((a,b)=> a.rowIndex-b.rowIndex || (a.dueDate||0)-(b.dueDate||0));
+    .sort((a,b)=> (a.script||'').localeCompare(b.script||'') || a.rowIndex-b.rowIndex || (a.dueDate||0)-(b.dueDate||0));
 
   const trs = rows.map(c=>{
     const acc = c.reviewsCount ? Math.round(100*c.correctCount/c.reviewsCount) : 0;
     const tagClass = c.phase==='review' ? 'rev' : 'lrn';
     const due = c.phase==='review' ? new Date(c.dueDate).toLocaleDateString() : '—';
+    const scriptLabel = SCRIPT_DEFS[c.script] ? SCRIPT_DEFS[c.script].label : c.script;
     return `<tr>
       <td class="kn">${c.kana}</td>
       <td>${c.romaji}</td>
+      <td>${scriptLabel}</td>
       <td>${c.direction==='production'?'type':'select'}</td>
       <td><span class="tag ${tagClass}">${c.phase}</span></td>
       <td>${acc}%</td>
@@ -1261,13 +1532,14 @@ function renderStats(){
       <div class="stat-block"><div class="num">${totalAcc}%</div><div class="lab">overall accuracy</div></div>
     </div>
     <table>
-      <thead><tr><th>Kana</th><th>Romaji</th><th>Mode</th><th>Status</th><th>Accuracy</th><th>Next due</th></tr></thead>
-      <tbody>${trs || '<tr><td colspan="6" style="color:var(--ink-soft);padding-top:14px;">No cards studied yet — start a session from the Study tab.</td></tr>'}</tbody>
+      <thead><tr><th>Kana</th><th>Romaji</th><th>Script</th><th>Mode</th><th>Status</th><th>Accuracy</th><th>Next due</th></tr></thead>
+      <tbody>${trs || '<tr><td colspan="7" style="color:var(--ink-soft);padding-top:14px;">No cards studied yet — start a session from the Study tab.</td></tr>'}</tbody>
     </table>
   `;
   document.getElementById('backToSettings').onclick = ()=> setRoute('settings');
 }
 
+/* ---------- Settings ---------- */
 function renderSettings(){
   persistState();
   const s = state.settings;
@@ -1289,7 +1561,7 @@ function renderSettings(){
       </div>
     </div>
     <div class="field">
-      <label>New characters introduced per day</label>
+      <label>New characters introduced per day (per script)</label>
       <input type="number" id="newPerDay" min="1" max="20" value="${s.newPerDay}">
     </div>
     <div class="field">
@@ -1315,19 +1587,26 @@ function renderSettings(){
       <label>Tap-grid pool</label>
       <div class="choice-row">
         <button data-gs="unlocked" class="${s.gridScope!=='all'?'active':''}">Unlocked characters only</button>
-        <button data-gs="all" class="${s.gridScope==='all'?'active':''}">All hiragana</button>
+        <button data-gs="all" class="${s.gridScope==='all'?'active':''}">All characters in that script</button>
       </div>
     </div>
     <div class="field">
-      <label>Youon combinations (きゃ, しゅ, etc.)</label>
+      <label>Youon combinations (きゃ, しゅ, etc. — applies to both scripts)</label>
       <div class="choice-row">
         <button data-yo="off" class="${!s.includeYouon?'active':''}">Off</button>
         <button data-yo="on" class="${s.includeYouon?'active':''}">Include, after base rows</button>
       </div>
     </div>
     <div class="field">
-      <label>Unlock rows manually</label>
-      <div class="choice-row" id="unlockRow"></div>
+      <label>Unlock rows manually — Hiragana</label>
+      <div class="choice-row" id="unlockRowHiragana"></div>
+    </div>
+    <div class="field">
+      <label>Unlock rows manually — Katakana</label>
+      <div class="choice-row" id="unlockRowKatakana"></div>
+    </div>
+    <div class="field">
+      <button class="muted-btn" id="resetOverridesBtn">Reset all rows to automatic</button>
     </div>
     <div class="field">
       <label>Progress file</label>
@@ -1339,38 +1618,38 @@ function renderSettings(){
       <p class="help" id="ioMsg" style="min-height:18px;"></p>
     </div>
   `;
-  const unlocked = unlockedRowIndexes();
-  const activeRows = ROWS.filter(r => !r.optional || s.includeYouon);
-  const unlockRowEl = document.getElementById('unlockRow');
-  activeRows.forEach(row=>{
-    const isUnlocked = unlocked.has(row.id);
-    const btn = document.createElement('button');
-    btn.textContent = (row.optional ? row.label : row.items.map(i=>i[0]).join('')) + (isUnlocked ? ' ✓' : ' 🔒');
-    if(isUnlocked) btn.className = 'active';
-    btn.onclick = ()=>{
-      if(!state.rowOverrides) state.rowOverrides = {};
-      if(isUnlocked){
-        state.rowOverrides[row.id] = 'lock';
-      } else if(naturallyUnlockedRowIds().has(row.id)){
-        /* Already naturally unlocked (just hidden by a prior 'lock'
-           override) — clear the override instead of forcing 'unlock',
-           so it goes back to normal budget-paced behavior rather than
-           permanently bypassing the daily new-card cap. */
-        delete state.rowOverrides[row.id];
-      } else {
-        state.rowOverrides[row.id] = 'unlock';
-      }
-      renderSettings();
-    };
-    unlockRowEl.appendChild(btn);
-  });
-  const resetBtn2 = document.createElement('button');
-  resetBtn2.textContent = 'Reset to automatic';
-  resetBtn2.onclick = ()=>{
-    state.rowOverrides = {};
+
+  function wireUnlockList(scriptId, elId){
+    const def = SCRIPT_DEFS[scriptId];
+    const unlocked = unlockedRowIndexes(scriptId);
+    const activeRows = def.rows.filter(r => !r.optional || s.includeYouon);
+    const el = document.getElementById(elId);
+    activeRows.forEach(row=>{
+      const isUnlocked = unlocked.has(row.id);
+      const btn = document.createElement('button');
+      btn.textContent = (row.optional ? row.label : row.items.map(i=>i[0]).join('')) + (isUnlocked ? ' ✓' : ' 🔒');
+      if(isUnlocked) btn.className = 'active';
+      btn.onclick = ()=>{
+        if(!state.rowOverrides[scriptId]) state.rowOverrides[scriptId] = {};
+        if(isUnlocked){
+          state.rowOverrides[scriptId][row.id] = 'lock';
+        } else if(naturallyUnlockedRowIds(scriptId).has(row.id)){
+          delete state.rowOverrides[scriptId][row.id];
+        } else {
+          state.rowOverrides[scriptId][row.id] = 'unlock';
+        }
+        renderSettings();
+      };
+      el.appendChild(btn);
+    });
+  }
+  wireUnlockList('hiragana', 'unlockRowHiragana');
+  wireUnlockList('katakana', 'unlockRowKatakana');
+
+  document.getElementById('resetOverridesBtn').onclick = ()=>{
+    state.rowOverrides = { hiragana:{}, katakana:{} };
     renderSettings();
   };
-  unlockRowEl.appendChild(resetBtn2);
 
   document.getElementById('newPerDay').onchange = e=>{ s.newPerDay = Math.max(1, parseInt(e.target.value)||5); persistState(); };
   document.getElementById('reviewCap').onchange = e=>{ s.reviewCap = Math.max(5, parseInt(e.target.value)||40); persistState(); };
@@ -1407,8 +1686,10 @@ function renderSettings(){
     }
     clearTimeout(pendingResetTimer);
     pendingReset = false;
-    state = { settings:Object.assign({},DEFAULT_SETTINGS), cards:{}, newIntroducedToday:0, lastActiveDate:todayStr(), totals:{reviews:0,correct:0}, forcedRows:[], rowOverrides:{}, createdAt:Date.now() };
+    state = freshState();
     try{ localStorage.removeItem(STORAGE_KEY); }catch(err){}
+    applyTheme();
+    updateModePill();
     renderSettings();
   };
 }
@@ -1434,12 +1715,10 @@ document.getElementById('importFile').addEventListener('change', e=>{
     try{
       const parsed = JSON.parse(reader.result);
       if(parsed && parsed.cards && parsed.settings){
-        state = parsed;
-        if(!state.rowOverrides) state.rowOverrides = {};
-        if(Array.isArray(state.forcedRows)){
-          state.forcedRows.forEach(id => { if(!(id in state.rowOverrides)) state.rowOverrides[id] = 'unlock'; });
-        }
+        state = migrateState(parsed);
         rolloverDay();
+        applyTheme();
+        updateModePill();
         renderSettings();
         const m = document.getElementById('ioMsg');
         if(m) m.textContent = 'Progress imported.';
@@ -1456,20 +1735,12 @@ document.getElementById('importFile').addEventListener('change', e=>{
 
 /* ============================= INIT ============================= */
 const restored = loadPersistedState();
-if(restored){
-  state = restored;
-  if(!state.rowOverrides) state.rowOverrides = {};
-  if(Array.isArray(state.forcedRows)){
-    state.forcedRows.forEach(id => { if(!(id in state.rowOverrides)) state.rowOverrides[id] = 'unlock'; });
-  }
-}
+if(restored) state = restored;
 rolloverDay();
 applyTheme();
+updateModePill();
 setRoute('home');
 
-/* Where supported (Chrome/Android), ask the OS keyboard to resize the
-   page layout around itself instead of floating on top of it, so it
-   doesn't cover the answer field or prompt while typing. */
 if('virtualKeyboard' in navigator){
   try{ navigator.virtualKeyboard.overlaysContent = false; }catch(err){}
 }
@@ -1488,6 +1759,7 @@ window.addEventListener('beforeinstallprompt', (e)=>{
 });
 
 })();
+
 </script>
 </body>
 </html>
