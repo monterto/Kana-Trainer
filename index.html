@@ -2020,7 +2020,29 @@ if('virtualKeyboard' in navigator){
 
 if('serviceWorker' in navigator && location.protocol !== 'file:'){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+    navigator.serviceWorker.register('service-worker.js').then(reg=>{
+      /* Browsers only check for a changed service-worker.js on their own
+         roughly once every 24 hours — bumping the CACHE_NAME does nothing
+         until an actual check happens. Force one every time the app opens
+         or comes back to the foreground, rather than waiting on that. */
+      reg.update();
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.visibilityState === 'visible') reg.update();
+      });
+    }).catch(()=>{});
+  });
+
+  /* skipWaiting()/clients.claim() in the service worker let a new version
+     take over network requests, but the JS already running in an open tab
+     stays on the OLD code until an actual reload happens. Reload once,
+     automatically, the moment a new service worker takes control, so
+     updates apply themselves instead of silently waiting for the next
+     manual close-and-reopen. */
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
   });
 }
 
