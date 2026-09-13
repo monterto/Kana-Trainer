@@ -10,23 +10,29 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-  /* Bundled font: renders kana identically on every device, rather
-     than depending on whichever Japanese font (if any) happens to be
-     installed. M PLUS 1p was chosen for clean, modern legibility with
+  /* Bundled font: renders every character identically on every device,
+     rather than depending on whichever Japanese font (if any) happens to
+     be installed. M PLUS 1p was chosen for clean, modern legibility with
      no Adobe/Reserved-Font-Name entanglement in its license (plain
      OFL, Copyright The M+ Project Authors). Subsetted to hiragana +
-     katakana + 仮, so it's still only ~13KB per weight instead of the
-     multi-MB original. Its 500 (Medium) weight is registered under the
-     CSS weight 600, since M PLUS 1p has no dedicated 600/SemiBold cut. */
+     katakana + every kanji character actually used across the app's
+     kanji rows (118 characters) + 仮, so it's still only ~23KB per
+     weight instead of the multi-MB original. IMPORTANT: adding new
+     kanji to KANJI_ROWS requires re-subsetting this font to include
+     the new codepoints, or those characters will silently fall back
+     to whatever the device happens to have installed — the exact
+     inconsistency this bundled font exists to prevent. Its 500 (Medium)
+     weight is registered under the CSS weight 600, since M PLUS 1p has
+     no dedicated 600/SemiBold cut. */
   @font-face{
     font-family:"KanaTrainer JP";
-    src:url("fonts/MPLUS1p-HiraKata-Regular.woff2") format("woff2");
+    src:url("fonts/MPLUS1p-Full-Regular.woff2") format("woff2");
     font-weight:400;
     font-display:swap;
   }
   @font-face{
     font-family:"KanaTrainer JP";
-    src:url("fonts/MPLUS1p-HiraKata-Medium.woff2") format("woff2");
+    src:url("fonts/MPLUS1p-Full-Medium.woff2") format("woff2");
     font-weight:600;
     font-display:swap;
   }
@@ -263,6 +269,17 @@
 
   .row-progress{ margin-top:26px; }
   .row-progress h3{ font-size:14px; font-weight:600; margin:0 0 10px; color:var(--ink-soft); }
+  h3.settings-section{
+    font-size:13px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    color:var(--indigo);
+    margin:32px 0 14px;
+    padding-top:20px;
+    border-top:1px solid var(--paper-line);
+  }
+  h3.settings-section:first-child{ margin-top:0; padding-top:0; border-top:none; }
   .row-line{
     display:flex; align-items:center; gap:10px;
     padding:6px 0; border-bottom:1px solid var(--paper-line);
@@ -506,8 +523,8 @@
       <div class="sub-menu mode-panel" id="modePanel" hidden>
         <button data-script="hiragana">Hiragana</button>
         <button data-script="katakana">Katakana</button>
+        <button data-script="kanji">Kanji</button>
         <button data-script="mixed">Mixed</button>
-        <button disabled title="Coming soon">Kanji <span style="opacity:0.6;">(soon)</span></button>
       </div>
     </div>
     <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">☰</button>
@@ -549,7 +566,7 @@ const HIRAGANA_ROWS = [
   {id:'d', label:'だ行 dakuten', items:[['だ','da'],['ぢ','ji'],['づ','zu'],['で','de'],['ど','do']]},
   {id:'b', label:'ば行 dakuten', items:[['ば','ba'],['び','bi'],['ぶ','bu'],['べ','be'],['ぼ','bo']]},
   {id:'p', label:'ぱ行 handakuten', items:[['ぱ','pa'],['ぴ','pi'],['ぷ','pu'],['ぺ','pe'],['ぽ','po']]},
-  {id:'youon', label:'Youon combinations', optional:true, items:[
+  {id:'youon', label:'Youon combinations', optional:true, toggleKey:'includeYouonHiragana', items:[
     ['きゃ','kya'],['きゅ','kyu'],['きょ','kyo'],['しゃ','sha'],['しゅ','shu'],['しょ','sho'],
     ['ちゃ','cha'],['ちゅ','chu'],['ちょ','cho'],['にゃ','nya'],['にゅ','nyu'],['にょ','nyo'],
     ['ひゃ','hya'],['ひゅ','hyu'],['ひょ','hyo'],['みゃ','mya'],['みゅ','myu'],['みょ','myo'],
@@ -575,7 +592,7 @@ const KATAKANA_ROWS = [
   {id:'d', label:'ダ行 dakuten', items:[['ダ','da'],['ヂ','ji'],['ヅ','zu'],['デ','de'],['ド','do']]},
   {id:'b', label:'バ行 dakuten', items:[['バ','ba'],['ビ','bi'],['ブ','bu'],['ベ','be'],['ボ','bo']]},
   {id:'p', label:'パ行 handakuten', items:[['パ','pa'],['ピ','pi'],['プ','pu'],['ペ','pe'],['ポ','po']]},
-  {id:'youon', label:'Youon combinations', optional:true, items:[
+  {id:'youon', label:'Youon combinations', optional:true, toggleKey:'includeYouonKatakana', items:[
     ['キャ','kya'],['キュ','kyu'],['キョ','kyo'],['シャ','sha'],['シュ','shu'],['ショ','sho'],
     ['チャ','cha'],['チュ','chu'],['チョ','cho'],['ニャ','nya'],['ニュ','nyu'],['ニョ','nyo'],
     ['ヒャ','hya'],['ヒュ','hyu'],['ヒョ','hyo'],['ミャ','mya'],['ミュ','myu'],['ミョ','myo'],
@@ -585,15 +602,59 @@ const KATAKANA_ROWS = [
   ]}
 ];
 
-/* Kanji is intentionally a stub, not an implementation. Kanji need a
-   genuinely different card model (multiple readings, meanings) that
-   doesn't fit the kana row/reading template — registering it here with
-   enabled:false proves the extension point works without shipping a
-   half-right kanji experience. Flip enabled:true once rows+cards exist. */
+/* Core ~100 kanji, grouped into logical study rows rather than by JLPT
+   level or frequency rank — a beginner unlocking rows in order should
+   feel like "numbers, then calendar, then people..." not an arbitrary
+   sequence. Cross-referenced against multiple independent N5 compilations
+   and MEXT's Grade 1 Kyōiku kanji list (see the research audit for
+   sourcing); each character appears in exactly one row even where it has
+   dual uses (前/後 mean both "before/after" and "front/back" — filed under
+   Direction only, not duplicated into Time, since a card can only belong
+   to one row's unlock-progression without corrupting that logic). */
+const KANJI_ROWS = [
+  {id:'num1', label:'Numbers I', items:[['一','ichi','one'],['二','ni','two'],['三','san','three'],['四','yon','four'],['五','go','five']]},
+  {id:'num2', label:'Numbers II', items:[['六','roku','six'],['七','nana','seven'],['八','hachi','eight'],['九','kyuu','nine'],['十','juu','ten']]},
+  {id:'num3', label:'Numbers III', items:[['百','hyaku','hundred'],['千','sen','thousand'],['万','man','ten thousand'],['円','en','yen']]},
+  {id:'days', label:'Days of the Week', items:[['日','nichi','day/sun'],['月','getsu','moon/month'],['火','ka','fire'],['水','sui','water'],['木','moku','tree/wood'],['金','kin','gold/money'],['土','do','earth/soil']]},
+  {id:'time1', label:'Time I', items:[['年','nen','year'],['今','ima','now'],['時','ji','time/hour'],['間','kan','interval/between'],['分','fun','minute']]},
+  {id:'time2', label:'Time II', items:[['半','han','half'],['週','shuu','week'],['先','sen','previous/ahead'],['午','go','noon']]},
+  {id:'people1', label:'People I', items:[['人','hito','person'],['男','otoko','man'],['女','onna','woman'],['子','ko','child']]},
+  {id:'people2', label:'People II', items:[['父','chichi','father'],['母','haha','mother'],['友','tomo','friend'],['名','na','name']]},
+  {id:'adj1', label:'Adjectives I', items:[['大','ookii','big'],['小','chiisai','small'],['高','takai','tall/expensive'],['安','yasui','cheap'],['新','atarashii','new']]},
+  {id:'adj2', label:'Adjectives II', items:[['古','furui','old'],['長','nagai','long'],['多','ooi','many'],['少','sukunai','few']]},
+  {id:'colors', label:'Colors', items:[['白','shiro','white'],['赤','aka','red'],['青','ao','blue']]},
+  {id:'dir1', label:'Direction I', items:[['上','ue','up'],['下','shita','down'],['中','naka','inside/middle'],['左','hidari','left'],['右','migi','right']]},
+  {id:'dir2', label:'Direction II', items:[['前','mae','front/before'],['後','ushiro','back/after'],['東','higashi','east'],['西','nishi','west'],['南','minami','south'],['北','kita','north']]},
+  {id:'nature', label:'Nature', items:[['山','yama','mountain'],['川','kawa','river'],['天','ten','heaven/sky'],['気','ki','spirit/energy'],['雨','ame','rain'],['花','hana','flower'],['空','sora','sky']]},
+  {id:'body', label:'Body', items:[['耳','mimi','ear'],['手','te','hand'],['足','ashi','foot/leg'],['目','me','eye'],['口','kuchi','mouth']]},
+  {id:'verbs1', label:'Verbs I', items:[['行','iku','go'],['見','miru','see'],['食','taberu','eat'],['飲','nomu','drink'],['買','kau','buy']]},
+  {id:'verbs2', label:'Verbs II', items:[['入','hairu','enter'],['出','deru','exit'],['言','iu','say'],['立','tatsu','stand'],['会','au','meet']]},
+  {id:'verbs3', label:'Verbs III', items:[['読','yomu','read'],['書','kaku','write'],['話','hanasu','speak'],['聞','kiku','hear'],['休','yasumu','rest'],['来','kuru','come']]},
+  {id:'places1', label:'Places I', items:[['駅','eki','station'],['電','den','electricity'],['車','kuruma','car'],['店','mise','shop'],['国','kuni','country']]},
+  {id:'places2', label:'Places II', items:[['学','gaku','study'],['校','kou','school'],['道','michi','road'],['社','sha','company/shrine'],['外','soto','outside'],['本','hon','book/origin']]},
+  {id:'misc', label:'Everyday Words', items:[['私','watashi','I/me'],['語','go','language'],['何','nani','what'],['毎','mai','every']]},
+  /* Several of these sit at N4 in most curricula — a notch past "core
+     beginner" — but showed up so consistently across travel/signage
+     sources that a traveler will meet them within an hour of landing.
+     Modeled as whole compound words (like 危険, not 危 and 険 separately),
+     since that's how they're actually encountered on real signs. */
+  {id:'travel', label:'Travel & Signage', optional:true, toggleKey:'includeTravelKanji', items:[
+    ['危険','kiken','danger'],['禁止','kinshi','prohibited'],['非常口','hijouguchi','emergency exit'],['注意','chuui','caution'],
+    ['案内','annai','information'],['切符','kippu','ticket'],['両替','ryougae','currency exchange'],['立入禁止','tachiirikinshi','no entry']
+  ]}
+];
+
+/* Kanji reuses the exact same card/scheduling engine as kana — each row
+   entry is a [character(s), reading] pair just like a youon combo can be
+   multi-character. The one deliberate difference is the default answer
+   method (see DEFAULT_SETTINGS): kanji defaults to tap-grid rather than
+   freehand drawing, since correctly hand-drawing a kanji from memory is a
+   meaningfully harder skill than tracing a kana glyph — freehand is still
+   available as an opt-in per-script setting for anyone who wants it. */
 const SCRIPT_DEFS = {
-  hiragana: { id:'hiragana', label:'Hiragana', enabled:true,  hasYouon:true,  rows:HIRAGANA_ROWS },
-  katakana: { id:'katakana', label:'Katakana', enabled:true,  hasYouon:true,  rows:KATAKANA_ROWS },
-  kanji:    { id:'kanji',    label:'Kanji',    enabled:false, hasYouon:false, rows:[], comingSoon:true }
+  hiragana: { id:'hiragana', label:'Hiragana', enabled:true, hasYouon:true, rows:HIRAGANA_ROWS },
+  katakana: { id:'katakana', label:'Katakana', enabled:true, hasYouon:true, rows:KATAKANA_ROWS },
+  kanji:    { id:'kanji',    label:'Kanji',    enabled:true, hasYouon:false, rows:KANJI_ROWS }
 };
 const SCRIPT_ORDER = ['hiragana','katakana','kanji'];
 const ENABLED_SCRIPTS = SCRIPT_ORDER.filter(id=>SCRIPT_DEFS[id].enabled);
@@ -607,12 +668,23 @@ const ALL_KANA_LIST = [];
 ENABLED_SCRIPTS.forEach(scriptId=>{
   const def = SCRIPT_DEFS[scriptId];
   def.rows.forEach((row, ri)=>{
-    row.items.forEach(([kana, romaji])=>{
-      ALL_KANA_LIST.push({ kana, romaji, script:scriptId, rowId:row.id, rowIndex:ri, rowLabel:row.label, optional:!!row.optional });
+    row.items.forEach(([kana, romaji, meaning])=>{
+      ALL_KANA_LIST.push({ kana, romaji, meaning, script:scriptId, rowId:row.id, rowIndex:ri, rowLabel:row.label, optional:!!row.optional, toggleKey:row.toggleKey });
     });
   });
 });
 function kanaListForScript(scriptId){ return ALL_KANA_LIST.filter(k=>k.script===scriptId); }
+
+/* Whether an optional row (or an item copied from one) is currently
+   switched on. Generalizes the old hardcoded "youon toggle" so any
+   script can register its own optional row behind its own setting —
+   kanji's Travel & Signage row uses includeTravelKanji, hiragana's youon
+   row uses includeYouonHiragana, katakana's uses includeYouonKatakana —
+   all fully independent. Non-optional rows are always on. */
+function isRowEnabled(rowOrItem){
+  if(!rowOrItem.optional) return true;
+  return !!(rowOrItem.toggleKey && state.settings[rowOrItem.toggleKey]);
+}
 
 /* Kunrei/Nihon-shiki alternates that are genuinely ambiguous with another
    character's Hepburn reading get scoped to the specific kana rather than
@@ -637,16 +709,26 @@ function altSpellings(r, kana){
   return [...set];
 }
 
+/* Kanji meanings are stored as a single string with "/" separating
+   genuinely common alternate senses (e.g. "front/before" for 前) —
+   split here so typing any one of them is accepted. */
+function acceptedMeanings(meaning){
+  if(!meaning) return [];
+  return meaning.split('/').map(s=>s.trim().toLowerCase()).filter(Boolean);
+}
+
 /* ============================= SETTINGS ============================= */
 const DEFAULT_SETTINGS = {
-  newPerDay: 5,             // per script — each script gets its own budget of this size
-  reviewCap: 40,
-  includeYouon: false,
-  directionMode: 'both',    // 'both' | 'recognition' | 'production'
-  kanaInputMode: 'draw',    // 'draw' (freehand, self-graded) | 'select' (tap grid)
-  gridScope: 'unlocked',    // 'unlocked' (only unlocked rows) | 'all' (every character in that script)
-  theme: 'dark',            // 'dark' | 'light'
-  studyScript: 'hiragana'   // 'hiragana' | 'katakana' | 'mixed'
+  newPerDay: { hiragana:5, katakana:5, kanji:3 },      // per script — kanji defaults slower given the heavier cognitive load
+  reviewCap: { hiragana:40, katakana:40, kanji:30 },   // per script
+  kanaInputMode: { hiragana:'draw', katakana:'draw', kanji:'select' }, // per script: 'draw' (freehand, self-graded) | 'select' (tap grid)
+  includeYouonHiragana: false, // hiragana's optional youon row
+  includeYouonKatakana: false, // katakana's optional youon row
+  includeTravelKanji: false,  // gates kanji's optional Travel & Signage row
+  directionMode: 'both',      // 'both' | 'recognition' | 'production' — shared across scripts
+  gridScope: 'unlocked',      // 'unlocked' (only unlocked rows) | 'all' (every character in that script) — shared
+  theme: 'dark',              // 'dark' | 'light'
+  studyScript: 'hiragana'     // 'hiragana' | 'katakana' | 'kanji' | 'mixed'
 };
 
 /* ---------- Theme ---------- */
@@ -658,14 +740,27 @@ function applyTheme(){
 /* ============================= STATE ============================= */
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 
+/* Object.assign({}, DEFAULT_SETTINGS) is only a SHALLOW copy — the nested
+   per-script objects (newPerDay, reviewCap, kanaInputMode) would still be
+   the exact same object references as DEFAULT_SETTINGS itself, so any
+   later mutation (e.g. changing kanji's daily budget in Settings) would
+   silently corrupt the actual defaults for every future reset. */
+function cloneDefaultSettings(){
+  return Object.assign({}, DEFAULT_SETTINGS, {
+    newPerDay: Object.assign({}, DEFAULT_SETTINGS.newPerDay),
+    reviewCap: Object.assign({}, DEFAULT_SETTINGS.reviewCap),
+    kanaInputMode: Object.assign({}, DEFAULT_SETTINGS.kanaInputMode)
+  });
+}
+
 function freshState(){
   return {
-    settings: Object.assign({}, DEFAULT_SETTINGS),
+    settings: cloneDefaultSettings(),
     cards: {},               // key: "kana|direction" -> card record (each tagged with .script)
-    newIntroducedToday: { hiragana:0, katakana:0 },
+    newIntroducedToday: { hiragana:0, katakana:0, kanji:0 },
     lastActiveDate: todayStr(),
     totals: { reviews:0, correct:0 },
-    rowOverrides: { hiragana:{}, katakana:{} },  // per script: rowId -> 'unlock' | 'lock'
+    rowOverrides: { hiragana:{}, katakana:{}, kanji:{} },  // per script: rowId -> 'unlock' | 'lock'
     createdAt: Date.now()
   };
 }
@@ -679,17 +774,49 @@ let state = freshState();
 function migrateState(raw){
   if(!raw || typeof raw !== 'object') return freshState();
 
-  raw.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings || {});
+  const origSettings = raw.settings || {};
+  raw.settings = Object.assign({}, DEFAULT_SETTINGS, origSettings);
+
+  /* includeYouon used to be one shared toggle for both hiragana and
+     katakana; now each script has its own. Old saves carry the single
+     boolean — apply it to both new keys so existing behavior is preserved
+     exactly (nothing suddenly turns off), while future changes are
+     independent. */
+  if('includeYouon' in origSettings && !('includeYouonHiragana' in origSettings) && !('includeYouonKatakana' in origSettings)){
+    raw.settings.includeYouonHiragana = !!origSettings.includeYouon;
+    raw.settings.includeYouonKatakana = !!origSettings.includeYouon;
+  }
+
+  /* newPerDay, reviewCap, kanaInputMode all moved from a single shared
+     value to a per-script object (so e.g. kanji can default to a slower
+     pace / grid-select without dragging hiragana/katakana along with it).
+     Old saves have a bare number/string here — apply that old value to
+     hiragana+katakana (preserving prior behavior exactly) and let the
+     newly-introduced kanji entry take the fresh default, since kanji
+     didn't exist when that value was set. */
+  function migratePerScript(oldVal, defaults, kind){
+    if(typeof oldVal === kind){
+      return { hiragana: oldVal, katakana: oldVal, kanji: defaults.kanji };
+    }
+    if(!oldVal || typeof oldVal !== 'object'){
+      return Object.assign({}, defaults);
+    }
+    return Object.assign({}, defaults, oldVal);
+  }
+  raw.settings.newPerDay = migratePerScript(origSettings.newPerDay, DEFAULT_SETTINGS.newPerDay, 'number');
+  raw.settings.reviewCap = migratePerScript(origSettings.reviewCap, DEFAULT_SETTINGS.reviewCap, 'number');
+  raw.settings.kanaInputMode = migratePerScript(origSettings.kanaInputMode, DEFAULT_SETTINGS.kanaInputMode, 'string');
 
   if(!raw.rowOverrides){
-    raw.rowOverrides = { hiragana:{}, katakana:{} };
+    raw.rowOverrides = { hiragana:{}, katakana:{}, kanji:{} };
   } else if(!('hiragana' in raw.rowOverrides) && !('katakana' in raw.rowOverrides)){
     /* Old flat shape from before multi-script support: {rowId:'lock'/'unlock'},
        implicitly all-hiragana since that was the only script that existed. */
-    raw.rowOverrides = { hiragana: raw.rowOverrides, katakana:{} };
+    raw.rowOverrides = { hiragana: raw.rowOverrides, katakana:{}, kanji:{} };
   } else {
     if(!raw.rowOverrides.hiragana) raw.rowOverrides.hiragana = {};
     if(!raw.rowOverrides.katakana) raw.rowOverrides.katakana = {};
+    if(!raw.rowOverrides.kanji) raw.rowOverrides.kanji = {};
   }
 
   if(Array.isArray(raw.forcedRows)){
@@ -699,12 +826,13 @@ function migrateState(raw){
   }
 
   if(typeof raw.newIntroducedToday === 'number'){
-    raw.newIntroducedToday = { hiragana: raw.newIntroducedToday, katakana: 0 };
+    raw.newIntroducedToday = { hiragana: raw.newIntroducedToday, katakana: 0, kanji: 0 };
   } else if(!raw.newIntroducedToday){
-    raw.newIntroducedToday = { hiragana:0, katakana:0 };
+    raw.newIntroducedToday = { hiragana:0, katakana:0, kanji:0 };
   } else {
     if(typeof raw.newIntroducedToday.hiragana !== 'number') raw.newIntroducedToday.hiragana = 0;
     if(typeof raw.newIntroducedToday.katakana !== 'number') raw.newIntroducedToday.katakana = 0;
+    if(typeof raw.newIntroducedToday.kanji !== 'number') raw.newIntroducedToday.kanji = 0;
   }
 
   if(!raw.cards) raw.cards = {};
@@ -746,7 +874,7 @@ function ensureCard(item, direction){
   const key = cardKey(item.kana, direction);
   if(!state.cards[key]){
     state.cards[key] = {
-      kana:item.kana, romaji:item.romaji, script:item.script, rowId:item.rowId, rowIndex:item.rowIndex,
+      kana:item.kana, romaji:item.romaji, meaning:item.meaning, script:item.script, rowId:item.rowId, rowIndex:item.rowIndex,
       direction,
       phase:'new',        // new -> learning -> review (or relearning)
       interval:0,          // days, once in review
@@ -778,7 +906,7 @@ function rolloverDay(){
    unlocking keeps working even if a row is toggled off for a while. */
 function naturallyUnlockedRowIds(scriptId){
   const def = SCRIPT_DEFS[scriptId];
-  const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+  const activeRows = def.rows.filter(isRowEnabled);
   const directions = directionsForMode();
   const items = kanaListForScript(scriptId);
 
@@ -802,7 +930,7 @@ function naturallyUnlockedRowIds(scriptId){
 
 function unlockedRowIndexes(scriptId){
   const def = SCRIPT_DEFS[scriptId];
-  const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+  const activeRows = def.rows.filter(isRowEnabled);
   const natural = naturallyUnlockedRowIds(scriptId);
   const overrides = (state.rowOverrides && state.rowOverrides[scriptId]) || {};
 
@@ -824,16 +952,23 @@ function directionsForMode(){
 
 function activeKanaList(scriptId){
   const unlocked = unlockedRowIndexes(scriptId);
-  return kanaListForScript(scriptId).filter(k => (!k.optional || state.settings.includeYouon) && unlocked.has(k.rowId));
+  return kanaListForScript(scriptId).filter(k => isRowEnabled(k) && unlocked.has(k.rowId));
 }
 
 /* じ/ぢ (and katakana ジ/ヂ) share an identical Hepburn reading — genuinely
    ambiguous when only the romaji is shown. Scoped to same-script matches
    only: か and カ sharing "ka" is just the normal hiragana/katakana
    relationship, not a genuine ambiguity worth flagging. */
+/* じ/ぢ (and katakana ジ/ヂ) share an identical Hepburn reading — genuinely
+   ambiguous when only the romaji is shown, since they're just two spellings
+   of the same sound. Kanji reading collisions are a different situation
+   entirely: 五/午/語 all read "go" but are completely unrelated characters
+   (five / noon / language) that just happen to sound alike — treating them
+   as interchangeable would mark genuinely wrong answers as correct, so
+   this only ever applies to kana scripts. */
 function homophonesOf(kana){
   const item = ALL_KANA_LIST.find(k=>k.kana===kana);
-  if(!item) return [];
+  if(!item || item.script === 'kanji') return [];
   return ALL_KANA_LIST.filter(k=>k.script===item.script && k.romaji===item.romaji && k.kana!==kana).map(k=>k.kana);
 }
 
@@ -844,7 +979,7 @@ function homophonesOf(kana){
 function gridPool(card){
   const scriptId = card.script;
   if(state.settings.gridScope === 'all'){
-    return kanaListForScript(scriptId).filter(k => !k.optional || state.settings.includeYouon);
+    return kanaListForScript(scriptId).filter(isRowEnabled);
   }
   return activeKanaList(scriptId);
 }
@@ -889,7 +1024,7 @@ function graded(card, correct, latencyMs){
 
   if(card.phase === 'review'){
     if(correct){
-      const wideGrid = (card.direction === 'recognition' && state.settings.kanaInputMode === 'select' && state.settings.gridScope === 'all');
+      const wideGrid = (card.direction === 'recognition' && state.settings.kanaInputMode[card.script] === 'select' && state.settings.gridScope === 'all');
       const q = wideGrid ? 4 : (latencyMs < 3000 ? 5 : (latencyMs < 7000 ? 4 : 3));
       card.reps++;
       if(card.reps === 1) card.interval = 1;
@@ -949,7 +1084,10 @@ function buildSession(unlimited, scriptMode){
 
   shuffle(dueReview);
   shuffle(freshNew);
-  const reviewSlice = unlimited ? dueReview : dueReview.slice(0, state.settings.reviewCap);
+  const effectiveReviewCap = scriptMode === 'mixed'
+    ? Math.max(...ENABLED_SCRIPTS.map(s=>state.settings.reviewCap[s]))
+    : state.settings.reviewCap[scriptMode];
+  const reviewSlice = unlimited ? dueReview : dueReview.slice(0, effectiveReviewCap);
 
   let newSlice = [];
   const naturalSliceByScript = {};
@@ -959,7 +1097,7 @@ function buildSession(unlimited, scriptMode){
        explicit request to study it now. */
     const forcedNew = freshNew.filter(c=>isForceUnlocked(c.script, c.rowId));
     const naturalNew = freshNew.filter(c=>!isForceUnlocked(c.script, c.rowId));
-    const newBudget = unlimited ? naturalNew.length : Math.max(0, state.settings.newPerDay - state.newIntroducedToday[scriptMode]);
+    const newBudget = unlimited ? naturalNew.length : Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
     const naturalSlice = naturalNew.slice(0, newBudget);
     newSlice = forcedNew.concat(naturalSlice);
     naturalSliceByScript[scriptMode] = naturalSlice;
@@ -1063,8 +1201,72 @@ function dueCount(scriptMode){
 
   if(scriptMode === 'mixed') return n; // mixed never counts new cards — review-only by design
 
-  const newBudget = Math.max(0, state.settings.newPerDay - state.newIntroducedToday[scriptMode]);
+  const newBudget = Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
   return n + forcedFreshTotal + Math.min(newBudget, naturalFreshTotal);
+}
+
+/* When nothing is due right now, figure out WHEN the next thing becomes
+   available, so the Study tab can show a live countdown instead of a
+   flat "check back later." Two possible sources: the earliest not-yet-due
+   review card, or (single-script modes only) the next daily-budget reset
+   if there are still fresh characters waiting behind today's cap. Mixed
+   mode never introduces new cards, so only review dates apply there.
+   Returns a timestamp (ms), or null if there's genuinely nothing left
+   scheduled or waiting (e.g. everything currently unlocked is mastered). */
+function nextUtcMidnight(){
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()+1, 0, 0, 0, 0);
+}
+
+function nextAvailableAt(scriptMode){
+  const directions = directionsForMode();
+  const scripts = scriptsForMode(scriptMode);
+  let earliest = null;
+
+  scripts.forEach(scriptId=>{
+    const active = activeKanaList(scriptId);
+    active.forEach(item => directions.forEach(dir => ensureCard(item, dir))); // self-sufficient — don't rely on dueCount() having run first
+    Object.values(state.cards).forEach(c=>{
+      if(c.script !== scriptId) return;
+      if(!active.find(a=>a.kana===c.kana)) return;
+      if(!directions.includes(c.direction)) return;
+      if(c.phase === 'review' && c.dueDate > Date.now()){
+        if(earliest === null || c.dueDate < earliest) earliest = c.dueDate;
+      }
+    });
+  });
+
+  if(scriptMode !== 'mixed'){
+    const active = activeKanaList(scriptMode);
+    const naturalFreshCount = Object.values(state.cards).filter(c=>{
+      if(c.script !== scriptMode) return false;
+      if(!active.find(a=>a.kana===c.kana)) return false;
+      if(!directions.includes(c.direction)) return false;
+      return c.phase === 'new' && !isForceUnlocked(c.script, c.rowId);
+    }).length;
+    const budgetUsedUp = state.newIntroducedToday[scriptMode] >= state.settings.newPerDay[scriptMode];
+    if(naturalFreshCount > 0 && budgetUsedUp){
+      const midnight = nextUtcMidnight();
+      if(earliest === null || midnight < earliest) earliest = midnight;
+    }
+  }
+
+  return earliest;
+}
+
+function formatDuration(ms){
+  if(ms <= 0) return 'any moment now';
+  if(ms < 60000) return 'less than a minute';
+  const totalMinutes = Math.ceil(ms / 60000);
+  if(totalMinutes < 60) return totalMinutes + ' minute' + (totalMinutes===1?'':'s');
+  const totalHours = Math.floor(totalMinutes / 60);
+  const remMinutes = totalMinutes % 60;
+  if(totalHours < 24){
+    return totalHours + 'h' + (remMinutes>0 ? ' ' + remMinutes + 'm' : '');
+  }
+  const days = Math.floor(totalHours / 24);
+  const remHours = totalHours % 24;
+  return days + ' day' + (days===1?'':'s') + (remHours>0 ? ' ' + remHours + 'h' : '');
 }
 
 /* ============================= RENDERING ============================= */
@@ -1123,7 +1325,9 @@ document.querySelectorAll('#modePanel [data-script]').forEach(b=>{
   };
 });
 
+let homeCountdownTimer = null;
 function render(){
+  if(homeCountdownTimer){ clearInterval(homeCountdownTimer); homeCountdownTimer = null; }
   if(route==='home') renderHome();
   else if(route==='study') renderCard();
   else if(route==='stats') renderStats();
@@ -1136,7 +1340,7 @@ function render(){
 function rowProgressHtml(scriptId){
   const def = SCRIPT_DEFS[scriptId];
   const unlocked = unlockedRowIndexes(scriptId);
-  const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+  const activeRows = def.rows.filter(isRowEnabled);
   const directions = directionsForMode();
   const items = kanaListForScript(scriptId);
 
@@ -1180,16 +1384,26 @@ function renderHome(){
     rowProgressSection = `<div class="row-progress"><h3>Row progress</h3>${rowProgressHtml(scriptMode)}</div>`;
     const def = SCRIPT_DEFS[scriptMode];
     const unlocked = unlockedRowIndexes(scriptMode);
-    const activeRows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+    const activeRows = def.rows.filter(isRowEnabled);
     const unlockedRowsForSelect = activeRows.filter(r=>unlocked.has(r.id));
     freeStudyOptions = [{id:'all', label:'All studied characters'}].concat(
       unlockedRowsForSelect.map(r=>({ id:r.id, label:r.optional ? r.label : r.items.map(i=>i[0]).join('') }))
     );
   }
 
-  const startLabel = scriptMode === 'mixed'
-    ? (due===0 ? 'Nothing due — check back later' : 'Start mixed review ('+due+' cards)')
-    : (due===0 ? 'Nothing due — check back later' : 'Start session ('+due+' cards)');
+  const startLabel = due===0
+    ? 'Nothing due right now'
+    : (scriptMode === 'mixed' ? 'Start mixed review ('+due+' cards)' : 'Start session ('+due+' cards)');
+
+  let waitBlockHtml = '';
+  if(due === 0){
+    const nextAt = nextAvailableAt(scriptMode);
+    if(nextAt === null){
+      waitBlockHtml = `<p class="help">You're fully caught up on everything currently unlocked. Unlock more rows in Settings, or use Free study below, to keep going.</p>`;
+    } else {
+      waitBlockHtml = `<p class="help" id="nextAvailableCountdown">Next character available in ${formatDuration(nextAt - Date.now())}</p>`;
+    }
+  }
 
   $main.innerHTML = `
     <div class="summary-row">
@@ -1197,6 +1411,7 @@ function renderHome(){
       <div class="stat-block"><div class="num">${graduated}/${total||0}</div><div class="lab">graduated to review</div></div>
     </div>
     <button class="start-btn" id="startBtn" ${due===0?'disabled':''}>${startLabel}</button>
+    ${waitBlockHtml}
     ${scriptMode==='mixed' ? `<p class="help">Mixed mode reviews whatever's already unlocked in both scripts — it never introduces new characters. Switch to Hiragana or Katakana mode to learn new ones.</p>` : ''}
     ${introducedCount > 0 ? `
     <div class="free-study-wrap">
@@ -1210,6 +1425,22 @@ function renderHome(){
 
   const btn = document.getElementById('startBtn');
   if(btn) btn.onclick = ()=> startSession(false, scriptMode);
+
+  if(due === 0){
+    const nextAt = nextAvailableAt(scriptMode);
+    if(nextAt !== null){
+      const countdownEl = document.getElementById('nextAvailableCountdown');
+      const tick = ()=>{
+        const remaining = nextAt - Date.now();
+        if(remaining <= 0){
+          renderHome(); // time's up — refresh so the newly-due card actually shows
+          return;
+        }
+        if(countdownEl) countdownEl.textContent = 'Next character available in ' + formatDuration(remaining);
+      };
+      homeCountdownTimer = setInterval(tick, 30000);
+    }
+  }
 
   const freeToggle = document.getElementById('freeStudyToggle');
   const freeMenu = document.getElementById('freeStudyMenu');
@@ -1233,7 +1464,7 @@ function renderCard(){
   const pct = Math.round(100*session.pos/session.total);
 
   let body = '';
-  const drawMode = (card.direction === 'recognition' && state.settings.kanaInputMode === 'draw');
+  const drawMode = (card.direction === 'recognition' && state.settings.kanaInputMode[card.script] === 'draw');
   const homophones = (card.direction === 'recognition') ? homophonesOf(card.kana) : [];
   const homophoneNote = homophones.length
     ? `<p class="help" style="margin-top:2px;">${homophones.join(' / ')} ${homophones.length>1?'are':'is'} also read "${card.romaji}" — either is correct here.</p>`
@@ -1241,10 +1472,10 @@ function renderCard(){
 
   if(card.direction === 'production'){
     body = `
-      <div class="prompt-label">Type the reading</div>
+      <div class="prompt-label">${card.meaning ? 'Type the reading or the meaning' : 'Type the reading'}</div>
       <div class="prompt-kana jp">${card.kana}</div>
       <div class="answer-area">
-        <input type="text" id="romajiInput" class="romaji-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" placeholder="type romaji…">
+        <input type="text" id="romajiInput" class="romaji-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" placeholder="${card.meaning ? 'reading or meaning…' : 'type romaji…'}">
         <div class="submit-row"><button class="submit-btn" id="submitBtn">Check</button></div>
       </div>
       <div class="feedback" id="feedback"></div>
@@ -1310,7 +1541,7 @@ function renderCard(){
       } else {
         fb.textContent = correct
           ? (card.phase==='review' ? 'Correct — next review in ' + card.interval + ' day' + (card.interval===1?'':'s') : 'Correct')
-          : 'Not quite — ' + card.kana + ' is "' + card.romaji + '"';
+          : 'Not quite — ' + card.kana + ' is "' + card.romaji + '"' + (card.meaning ? ' (' + card.meaning + ')' : '');
       }
     }
     if(result.requeue){
@@ -1342,7 +1573,8 @@ function renderCard(){
       const val = input.value.trim().toLowerCase();
       if(!val) return;
       const accepted = altSpellings(card.romaji, card.kana);
-      finish(accepted.includes(val));
+      const meaningMatch = acceptedMeanings(card.meaning).includes(val);
+      finish(accepted.includes(val) || meaningMatch);
     }
     submitBtn.onclick = submit;
     input.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
@@ -1413,7 +1645,7 @@ function renderCard(){
         if(answered) return;
         const chosen = btn.dataset.kana;
         const isExactMatch = chosen === card.kana;
-        const isHomophoneMatch = btn.dataset.romaji === card.romaji;
+        const isHomophoneMatch = card.script !== 'kanji' && btn.dataset.romaji === card.romaji;
         const correct = isExactMatch || isHomophoneMatch;
         if(correct){
           btn.classList.add('correct');
@@ -1454,11 +1686,12 @@ function renderReference(){
 }
 
 function renderReferenceFor(scriptId){
+  const isKanji = scriptId === 'kanji';
   const def = SCRIPT_DEFS[scriptId];
-  const rows = def.rows.filter(r => !r.optional || state.settings.includeYouon);
+  const rows = def.rows.filter(isRowEnabled);
   const sections = rows.map(row=>{
-    const cells = row.items.map(([kana, romaji])=>
-      `<button class="ref-cell" data-kana="${kana}"><div class="k jp">${kana}</div><div class="r">${romaji}</div></button>`
+    const cells = row.items.map(([kana, romaji, meaning])=>
+      `<button class="ref-cell" data-kana="${kana}"><div class="k jp">${kana}</div><div class="r">${isKanji ? meaning : romaji}</div></button>`
     ).join('');
     return `<div class="ref-section">
       <h3>${row.label}</h3>
@@ -1470,10 +1703,14 @@ function renderReferenceFor(scriptId){
     `<button data-refscript="${id}" class="${id===scriptId?'active':''}">${SCRIPT_DEFS[id].label}</button>`
   ).join('');
 
+  const helpText = isKanji
+    ? 'Meaning shown by default — tap a character to see its reading.'
+    : 'Tap a character to see every spelling accepted when typing.';
+
   $main.innerHTML = `
     <div class="choice-row" style="margin-bottom:16px;">${tabsHtml}</div>
     <div class="ref-detail" id="refDetail">
-      <p class="help" style="margin:0;">Tap a character to see every spelling accepted when typing.</p>
+      <p class="help" style="margin:0;">${helpText}</p>
     </div>
     ${sections}
   `;
@@ -1495,6 +1732,7 @@ function renderReferenceFor(scriptId){
         <div class="ref-detail-kana jp">${kana}</div>
         <div class="ref-detail-body">
           <div class="ref-detail-primary">${item.romaji}${alternates.length ? ' <span class="ref-detail-alts">(' + alternates.join(', ') + ')</span>' : ''}</div>
+          ${isKanji ? `<div class="ref-detail-alts">${item.meaning}</div>` : ''}
         </div>
       `;
     };
@@ -1540,10 +1778,56 @@ function renderStats(){
 }
 
 /* ---------- Settings ---------- */
+function scriptSettingsSectionHtml(scriptId){
+  const s = state.settings;
+  const def = SCRIPT_DEFS[scriptId];
+  const youonKey = scriptId === 'hiragana' ? 'includeYouonHiragana' : 'includeYouonKatakana';
+  const toggleField = scriptId === 'kanji'
+    ? `<div class="field">
+        <label>Travel &amp; Signage words (危険, 禁止, etc. — mostly N4, but common on real signs)</label>
+        <div class="choice-row">
+          <button data-travel="off" class="${!s.includeTravelKanji?'active':''}">Off</button>
+          <button data-travel="on" class="${s.includeTravelKanji?'active':''}">Include, after base rows</button>
+        </div>
+      </div>`
+    : `<div class="field">
+        <label>Youon combinations (きゃ, しゅ, etc.)</label>
+        <div class="choice-row">
+          <button data-yo="off" data-yo-script="${scriptId}" class="${!s[youonKey]?'active':''}">Off</button>
+          <button data-yo="on" data-yo-script="${scriptId}" class="${s[youonKey]?'active':''}">Include, after base rows</button>
+        </div>
+      </div>`;
+  const methodLabel = scriptId === 'kanji' ? 'Romaji → kanji answer method' : 'Romaji → kana answer method';
+  return `
+    <h3 class="settings-section">${def.label}</h3>
+    <div class="field">
+      <label>New characters introduced per day</label>
+      <input type="number" class="script-setting" data-field="newPerDay" data-script="${scriptId}" min="1" max="20" value="${s.newPerDay[scriptId]}">
+    </div>
+    <div class="field">
+      <label>Maximum review cards per session</label>
+      <input type="number" class="script-setting" data-field="reviewCap" data-script="${scriptId}" min="5" max="200" value="${s.reviewCap[scriptId]}">
+    </div>
+    <div class="field">
+      <label>${methodLabel}</label>
+      <div class="choice-row">
+        <button data-ki="draw" data-ki-script="${scriptId}" class="${s.kanaInputMode[scriptId]==='draw'?'active':''}">Draw from memory (self-graded)</button>
+        <button data-ki="select" data-ki-script="${scriptId}" class="${s.kanaInputMode[scriptId]==='select'?'active':''}">Tap from grid</button>
+      </div>
+    </div>
+    ${toggleField}
+    <div class="field">
+      <label>Unlock rows manually</label>
+      <div class="choice-row" id="unlockRow-${scriptId}"></div>
+    </div>
+  `;
+}
+
 function renderSettings(){
   persistState();
   const s = state.settings;
   $main.innerHTML = `
+    <h3 class="settings-section" style="margin-top:0;">General</h3>
     <div class="field">
       <label>Review stats</label>
       <button class="muted-btn" id="statsBtn">View stats</button>
@@ -1561,52 +1845,27 @@ function renderSettings(){
       </div>
     </div>
     <div class="field">
-      <label>New characters introduced per day (per script)</label>
-      <input type="number" id="newPerDay" min="1" max="20" value="${s.newPerDay}">
-    </div>
-    <div class="field">
-      <label>Maximum review cards per session</label>
-      <input type="number" id="reviewCap" min="5" max="200" value="${s.reviewCap}">
-    </div>
-    <div class="field">
-      <label>Card direction</label>
+      <label>Card direction (applies to every script)</label>
       <div class="choice-row">
         <button data-v="both" class="${s.directionMode==='both'?'active':''}">Both</button>
-        <button data-v="recognition" class="${s.directionMode==='recognition'?'active':''}">Romaji → kana only</button>
-        <button data-v="production" class="${s.directionMode==='production'?'active':''}">Kana → romaji only</button>
+        <button data-v="recognition" class="${s.directionMode==='recognition'?'active':''}">Romaji → character only</button>
+        <button data-v="production" class="${s.directionMode==='production'?'active':''}">Character → romaji only</button>
       </div>
     </div>
     <div class="field">
-      <label>Romaji → kana answer method</label>
-      <div class="choice-row">
-        <button data-ki="draw" class="${s.kanaInputMode==='draw'?'active':''}">Draw from memory (self-graded)</button>
-        <button data-ki="select" class="${s.kanaInputMode==='select'?'active':''}">Tap from grid</button>
-      </div>
-    </div>
-    <div class="field">
-      <label>Tap-grid pool</label>
+      <label>Tap-grid pool (applies to every script)</label>
       <div class="choice-row">
         <button data-gs="unlocked" class="${s.gridScope!=='all'?'active':''}">Unlocked characters only</button>
         <button data-gs="all" class="${s.gridScope==='all'?'active':''}">All characters in that script</button>
       </div>
     </div>
+
+    ${scriptSettingsSectionHtml('hiragana')}
+    ${scriptSettingsSectionHtml('katakana')}
+    ${scriptSettingsSectionHtml('kanji')}
+
     <div class="field">
-      <label>Youon combinations (きゃ, しゅ, etc. — applies to both scripts)</label>
-      <div class="choice-row">
-        <button data-yo="off" class="${!s.includeYouon?'active':''}">Off</button>
-        <button data-yo="on" class="${s.includeYouon?'active':''}">Include, after base rows</button>
-      </div>
-    </div>
-    <div class="field">
-      <label>Unlock rows manually — Hiragana</label>
-      <div class="choice-row" id="unlockRowHiragana"></div>
-    </div>
-    <div class="field">
-      <label>Unlock rows manually — Katakana</label>
-      <div class="choice-row" id="unlockRowKatakana"></div>
-    </div>
-    <div class="field">
-      <button class="muted-btn" id="resetOverridesBtn">Reset all rows to automatic</button>
+      <button class="muted-btn" id="resetOverridesBtn">Reset all rows to automatic (all scripts)</button>
     </div>
     <div class="field">
       <label>Progress file</label>
@@ -1619,11 +1878,11 @@ function renderSettings(){
     </div>
   `;
 
-  function wireUnlockList(scriptId, elId){
+  function wireUnlockList(scriptId){
     const def = SCRIPT_DEFS[scriptId];
     const unlocked = unlockedRowIndexes(scriptId);
-    const activeRows = def.rows.filter(r => !r.optional || s.includeYouon);
-    const el = document.getElementById(elId);
+    const activeRows = def.rows.filter(isRowEnabled);
+    const el = document.getElementById('unlockRow-' + scriptId);
     activeRows.forEach(row=>{
       const isUnlocked = unlocked.has(row.id);
       const btn = document.createElement('button');
@@ -1643,19 +1902,33 @@ function renderSettings(){
       el.appendChild(btn);
     });
   }
-  wireUnlockList('hiragana', 'unlockRowHiragana');
-  wireUnlockList('katakana', 'unlockRowKatakana');
+  ENABLED_SCRIPTS.forEach(wireUnlockList);
 
   document.getElementById('resetOverridesBtn').onclick = ()=>{
-    state.rowOverrides = { hiragana:{}, katakana:{} };
+    state.rowOverrides = { hiragana:{}, katakana:{}, kanji:{} };
     renderSettings();
   };
 
-  document.getElementById('newPerDay').onchange = e=>{ s.newPerDay = Math.max(1, parseInt(e.target.value)||5); persistState(); };
-  document.getElementById('reviewCap').onchange = e=>{ s.reviewCap = Math.max(5, parseInt(e.target.value)||40); persistState(); };
+  document.querySelectorAll('.script-setting[data-field="newPerDay"]').forEach(inp=>{
+    inp.onchange = e=>{
+      s.newPerDay[inp.dataset.script] = Math.max(1, parseInt(e.target.value)||1);
+      persistState();
+    };
+  });
+  document.querySelectorAll('.script-setting[data-field="reviewCap"]').forEach(inp=>{
+    inp.onchange = e=>{
+      s.reviewCap[inp.dataset.script] = Math.max(5, parseInt(e.target.value)||5);
+      persistState();
+    };
+  });
   document.querySelectorAll('[data-v]').forEach(b=> b.onclick = ()=>{ s.directionMode = b.dataset.v; renderSettings(); });
-  document.querySelectorAll('[data-yo]').forEach(b=> b.onclick = ()=>{ s.includeYouon = (b.dataset.yo==='on'); renderSettings(); });
-  document.querySelectorAll('[data-ki]').forEach(b=> b.onclick = ()=>{ s.kanaInputMode = b.dataset.ki; renderSettings(); });
+  document.querySelectorAll('[data-yo]').forEach(b=> b.onclick = ()=>{
+    const key = b.dataset.yoScript === 'hiragana' ? 'includeYouonHiragana' : 'includeYouonKatakana';
+    s[key] = (b.dataset.yo==='on');
+    renderSettings();
+  });
+  document.querySelectorAll('[data-travel]').forEach(b=> b.onclick = ()=>{ s.includeTravelKanji = (b.dataset.travel==='on'); renderSettings(); });
+  document.querySelectorAll('[data-ki]').forEach(b=> b.onclick = ()=>{ s.kanaInputMode[b.dataset.kiScript] = b.dataset.ki; renderSettings(); });
   document.querySelectorAll('[data-gs]').forEach(b=> b.onclick = ()=>{ s.gridScope = b.dataset.gs; renderSettings(); });
   document.querySelectorAll('[data-th]').forEach(b=> b.onclick = ()=>{ s.theme = b.dataset.th; applyTheme(); renderSettings(); });
   const installBtn = document.getElementById('installBtn');
