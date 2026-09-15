@@ -237,6 +237,13 @@
     font-size:13.5px;
     cursor:pointer;
   border-radius:var(--radius);}
+  .leech-btn{
+    color:var(--hanko);
+    border-color:var(--hanko);
+    margin-top:10px;
+    font-weight:600;
+  }
+  .leech-btn:hover{ background:var(--hanko); color:#fff; }
   .muted-btn:hover{ color:var(--ink); border-color:var(--indigo); }
   .sub-menu{
     position:absolute;
@@ -469,6 +476,7 @@
   .tag{ font-size:11px; padding:2px 6px; border:1px solid var(--paper-line); }
   .tag.rev{ color:var(--moss); border-color:var(--moss); }
   .tag.lrn{ color:var(--indigo); border-color:var(--indigo); }
+  .tag.leech{ color:var(--hanko); border-color:var(--hanko); }
   .tag.new{ color:var(--ink-soft); }
 
   /* ---------- Settings ---------- */
@@ -720,7 +728,7 @@ function acceptedMeanings(meaning){
 /* ============================= SETTINGS ============================= */
 const DEFAULT_SETTINGS = {
   newPerDay: { hiragana:5, katakana:5, kanji:3 },      // per script — kanji defaults slower given the heavier cognitive load
-  reviewCap: { hiragana:40, katakana:40, kanji:30 },   // per script
+  reviewCap: { hiragana:15, katakana:15, kanji:12 },   // per script — kept small so a sitting is quick, favoring frequent short sessions over one long grind
   kanaInputMode: { hiragana:'draw', katakana:'draw', kanji:'select' }, // per script: 'draw' (freehand, self-graded) | 'select' (tap grid)
   includeYouonHiragana: false, // hiragana's optional youon row
   includeYouonKatakana: false, // katakana's optional youon row
@@ -806,6 +814,18 @@ function migrateState(raw){
   raw.settings.newPerDay = migratePerScript(origSettings.newPerDay, DEFAULT_SETTINGS.newPerDay, 'number');
   raw.settings.reviewCap = migratePerScript(origSettings.reviewCap, DEFAULT_SETTINGS.reviewCap, 'number');
   raw.settings.kanaInputMode = migratePerScript(origSettings.kanaInputMode, DEFAULT_SETTINGS.kanaInputMode, 'string');
+
+  /* reviewCap's defaults shrank (40/40/30 -> 15/15/12) to favor shorter,
+     more frequent sessions. If a saved value exactly matches the OLD
+     default, treat it as "never customized" and carry it forward to the
+     new default rather than leaving it stuck at the old number forever —
+     but leave any value the person actually chose themselves untouched. */
+  const OLD_REVIEW_CAP_DEFAULTS = { hiragana:40, katakana:40, kanji:30 };
+  ['hiragana','katakana','kanji'].forEach(scriptId=>{
+    if(raw.settings.reviewCap[scriptId] === OLD_REVIEW_CAP_DEFAULTS[scriptId]){
+      raw.settings.reviewCap[scriptId] = DEFAULT_SETTINGS.reviewCap[scriptId];
+    }
+  });
 
   if(!raw.rowOverrides){
     raw.rowOverrides = { hiragana:{}, katakana:{}, kanji:{} };
@@ -992,6 +1012,9 @@ function isForceUnlocked(scriptId, rowId){
 const LEARN_LAG = [3,7];      // reinsert 3-7 cards later, same session
 const RELEARN_LAG = [2,4];
 const LEARN_STEPS_REQUIRED = 2; // correct answers needed to graduate
+const MAX_INTERVAL_DAYS = 60;   // cap how far reviews can stretch, so even fully-mastered
+                                 // characters get touched at least occasionally rather than
+                                 // drifting to months-long silence as ease compounds over time
 
 function graded(card, correct, latencyMs){
   state.totals.reviews++;
@@ -1029,7 +1052,7 @@ function graded(card, correct, latencyMs){
       card.reps++;
       if(card.reps === 1) card.interval = 1;
       else if(card.reps === 2) card.interval = 6;
-      else card.interval = Math.round(card.interval * card.ease);
+      else card.interval = Math.min(MAX_INTERVAL_DAYS, Math.round(card.interval * card.ease));
       card.ease = Math.max(1.3, card.ease + (0.1 - (5-q)*(0.08 + (5-q)*0.02)));
       card.dueDate = Date.now() + card.interval*86400000;
       return { requeue:false };
@@ -1107,6 +1130,26 @@ function buildSession(unlimited, scriptMode){
   dueLearning.forEach(c=>queue.push(c));
   reviewSlice.forEach(c=>queue.push(c));
   newSlice.forEach(c=>queue.push(c));
+
+  /* Gracefully weave a couple of active leeches into every normal session,
+     even ones not otherwise due yet — a lapsed card's post-lapse interval
+     can still be quite long (halved from whatever it was, so a card that
+     had reached 30 days becomes ~15), meaning a flagged trouble spot could
+     otherwise go untouched for weeks without someone remembering to seek
+     out the dedicated drill button. Capped small and shuffled in randomly
+     so it reinforces without dominating the session. */
+  const LEECH_INJECT_CAP = 2;
+  const alreadyQueued = new Set(queue.map(c => c.kana + '|' + c.direction));
+  const extraLeeches = Object.values(state.cards).filter(c=>{
+    if(!scripts.includes(c.script)) return false;
+    if(!activeByScript[c.script].find(a=>a.kana===c.kana)) return false;
+    if(!directions.includes(c.direction)) return false;
+    if(alreadyQueued.has(c.kana + '|' + c.direction)) return false;
+    return isLeech(c);
+  });
+  shuffle(extraLeeches);
+  extraLeeches.slice(0, LEECH_INJECT_CAP).forEach(c=>queue.push(c));
+
   shuffle(queue);
 
   return { queue, pos:0, correctCount:0, total:queue.length, naturalSliceByScript };
@@ -1150,6 +1193,59 @@ function buildFreeStudySession(scriptMode, rowId){
   });
   shuffle(pool);
   return { queue:pool, pos:0, correctCount:0, total:pool.length, naturalSliceByScript:{} };
+}
+
+/* Leech detection: a card that keeps getting forgotten despite review is a
+   different problem than a card that's simply due — it needs deliberate
+   extra attention, not just another routine pass through the normal queue.
+   Uses data already tracked by the SRS engine (lapses, reps) rather than
+   adding new bookkeeping. A card is an active leech once it has failed 3+
+   times as a review card; it self-resolves once answered correctly 3 times
+   since its last failure, using `reps` (which the scheduler already resets
+   to 1 on re-graduating from relearning) as that "clean streak" signal —
+   no manual dismiss/unflag action needed. */
+const LEECH_LAPSE_THRESHOLD = 3;
+const LEECH_RECOVERY_REPS = 3;
+function isLeech(card){
+  if(!card || card.lapses < LEECH_LAPSE_THRESHOLD) return false;
+  if(card.phase === 'relearning') return true;
+  if(card.phase === 'review') return card.reps < LEECH_RECOVERY_REPS;
+  return false;
+}
+
+function leechCount(scriptMode){
+  const directions = directionsForMode();
+  const scripts = scriptsForMode(scriptMode);
+  const activeByScript = {};
+  scripts.forEach(scriptId=> activeByScript[scriptId] = activeKanaList(scriptId));
+  return Object.values(state.cards).filter(c=>{
+    if(!scripts.includes(c.script)) return false;
+    if(!activeByScript[c.script].find(a=>a.kana===c.kana)) return false;
+    if(!directions.includes(c.direction)) return false;
+    return isLeech(c);
+  }).length;
+}
+
+/* Same "ignore due dates, drill it now" spirit as Free Study, but scoped
+   to only the currently-active leeches rather than everything studied. */
+function buildLeechSession(scriptMode){
+  const directions = directionsForMode();
+  const scripts = scriptsForMode(scriptMode);
+  const activeByScript = {};
+  scripts.forEach(scriptId=> activeByScript[scriptId] = activeKanaList(scriptId));
+  const pool = Object.values(state.cards).filter(c=>{
+    if(!scripts.includes(c.script)) return false;
+    if(!activeByScript[c.script].find(a=>a.kana===c.kana)) return false;
+    if(!directions.includes(c.direction)) return false;
+    return isLeech(c);
+  });
+  shuffle(pool);
+  return { queue:pool, pos:0, correctCount:0, total:pool.length, naturalSliceByScript:{} };
+}
+
+function startLeechDrill(scriptMode){
+  session = buildLeechSession(scriptMode);
+  setRoute('study');
 }
 
 function startFreeStudy(scriptMode, rowId){
@@ -1391,17 +1487,42 @@ function renderHome(){
     );
   }
 
-  const startLabel = due===0
-    ? 'Nothing due right now'
-    : (scriptMode === 'mixed' ? 'Start mixed review ('+due+' cards)' : 'Start session ('+due+' cards)');
+  const leeches = leechCount(scriptMode);
+
+  /* The primary button should never be a dead end. If nothing is strictly
+     due, fall back to an unlimited refresher pulled from everything
+     already learned (the same pool Free Study draws from) rather than
+     disabling the button — spaced-repetition intervals are SUPPOSED to
+     stretch out for well-known characters (that's the efficiency argument
+     behind SRS in the first place), but that shouldn't mean the app has
+     nothing for you to do. Free Study stays available separately for
+     scoping practice to one specific row; this is just "give me something
+     to do right now, whatever it is." */
+  let primaryLabel, primaryDisabled = false, primaryAction;
+  if(due > 0){
+    primaryLabel = scriptMode === 'mixed' ? `Start mixed review (${due} cards)` : `Start session (${due} cards)`;
+    primaryAction = ()=> startSession(false, scriptMode);
+  } else if(introducedCount > 0){
+    primaryLabel = 'Practice now';
+    primaryAction = ()=> startFreeStudy(scriptMode, 'all');
+  } else {
+    primaryLabel = 'Nothing to study yet';
+    primaryDisabled = true;
+    primaryAction = null;
+  }
 
   let waitBlockHtml = '';
   if(due === 0){
     const nextAt = nextAvailableAt(scriptMode);
-    if(nextAt === null){
-      waitBlockHtml = `<p class="help">You're fully caught up on everything currently unlocked. Unlock more rows in Settings, or use Free study below, to keep going.</p>`;
+    const countdownNote = nextAt !== null
+      ? ` New characters available in <span id="nextAvailableCountdown">${formatDuration(nextAt - Date.now())}</span>.`
+      : '';
+    if(introducedCount > 0){
+      waitBlockHtml = `<p class="help">Nothing new is due right now, so this reviews what you've already learned instead.${countdownNote}</p>`;
+    } else if(nextAt !== null){
+      waitBlockHtml = `<p class="help">${countdownNote.trim()}</p>`;
     } else {
-      waitBlockHtml = `<p class="help" id="nextAvailableCountdown">Next character available in ${formatDuration(nextAt - Date.now())}</p>`;
+      waitBlockHtml = `<p class="help">Nothing unlocked yet — check Settings to unlock a row.</p>`;
     }
   }
 
@@ -1410,9 +1531,10 @@ function renderHome(){
       <div class="stat-block"><div class="num">${due}</div><div class="lab">cards due now</div></div>
       <div class="stat-block"><div class="num">${graduated}/${total||0}</div><div class="lab">graduated to review</div></div>
     </div>
-    <button class="start-btn" id="startBtn" ${due===0?'disabled':''}>${startLabel}</button>
+    <button class="start-btn" id="startBtn" ${primaryDisabled?'disabled':''}>${primaryLabel}</button>
     ${waitBlockHtml}
     ${scriptMode==='mixed' ? `<p class="help">Mixed mode reviews whatever's already unlocked in both scripts — it never introduces new characters. Switch to Hiragana or Katakana mode to learn new ones.</p>` : ''}
+    ${leeches > 0 ? `<button class="muted-btn leech-btn" id="leechBtn">⚠ Trouble spots (${leeches})</button>` : ''}
     ${introducedCount > 0 ? `
     <div class="free-study-wrap">
       <button class="muted-btn" id="freeStudyToggle">Free study</button>
@@ -1424,7 +1546,10 @@ function renderHome(){
   `;
 
   const btn = document.getElementById('startBtn');
-  if(btn) btn.onclick = ()=> startSession(false, scriptMode);
+  if(btn && primaryAction) btn.onclick = primaryAction;
+
+  const leechBtn = document.getElementById('leechBtn');
+  if(leechBtn) leechBtn.onclick = ()=> startLeechDrill(scriptMode);
 
   if(due === 0){
     const nextAt = nextAvailableAt(scriptMode);
@@ -1436,7 +1561,7 @@ function renderHome(){
           renderHome(); // time's up — refresh so the newly-due card actually shows
           return;
         }
-        if(countdownEl) countdownEl.textContent = 'Next character available in ' + formatDuration(remaining);
+        if(countdownEl) countdownEl.textContent = formatDuration(remaining);
       };
       homeCountdownTimer = setInterval(tick, 30000);
     }
@@ -1755,7 +1880,7 @@ function renderStats(){
       <td>${c.romaji}</td>
       <td>${scriptLabel}</td>
       <td>${c.direction==='production'?'type':'select'}</td>
-      <td><span class="tag ${tagClass}">${c.phase}</span></td>
+      <td><span class="tag ${tagClass}">${c.phase}</span>${isLeech(c) ? ' <span class="tag leech">⚠ leech</span>' : ''}</td>
       <td>${acc}%</td>
       <td>${due}</td>
     </tr>`;
