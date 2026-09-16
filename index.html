@@ -46,6 +46,7 @@
     --indigo-deep:#9DBEDA;
     --hanko:#E08370;
     --moss:#8FBA8E;
+    --moss-young:#5C7263;
     --card:#1B2126;
     --radius-sm:8px;
     --radius:12px;
@@ -61,6 +62,7 @@
     --indigo-deep:#1F3A4D;
     --hanko:#A83F32;
     --moss:#5C7A5E;
+    --moss-young:#A8BFA0;
     --card:#F7F3E8;
   }
   body{ transition:background 0.15s, color 0.15s; }
@@ -289,15 +291,44 @@
   h3.settings-section:first-child{ margin-top:0; padding-top:0; border-top:none; }
   .row-line{
     display:flex; align-items:center; gap:10px;
+    width:100%;
     padding:6px 0; border-bottom:1px solid var(--paper-line);
     font-size:14px;
+    background:transparent; border-left:none; border-right:none; border-top:none;
+    font-family:inherit; color:var(--ink); text-align:left; cursor:default;
   }
+  .row-line.unlocked-row{ cursor:pointer; }
   .row-line .rk{ font-family:"KanaTrainer JP","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif; font-size:17px; width:140px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .row-line .rk.label{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:13px; }
-  .row-line .bar{ flex:1; height:6px; background:var(--paper-line); position:relative; border-radius:var(--radius-pill);overflow:hidden;}
-  .row-line .bar .fill{ position:absolute; left:0; top:0; bottom:0; background:var(--moss); }
+  .row-line .bar{ flex:1; height:6px; background:var(--paper-line); position:relative; border-radius:var(--radius-pill); overflow:hidden; display:flex; }
+  .row-line .bar .seg{ height:100%; }
+  .row-line .seg-mature{ background:var(--moss); }
+  .row-line .seg-young{ background:var(--moss-young); }
+  .row-line .seg-learning{ background:var(--indigo); }
   .row-line .locked{ color:var(--paper-line); }
-  .row-line .pct{ width:38px; text-align:right; color:var(--ink-soft); font-size:12px;}
+  .row-line .pct{ width:44px; text-align:right; color:var(--ink-soft); font-size:12px; flex-shrink:0; }
+  .row-line .row-caret{ font-size:11px; color:var(--ink-soft); transition:transform 0.15s; flex-shrink:0; width:12px; }
+  .row-line[aria-expanded="true"] .row-caret{ transform:rotate(180deg); }
+  .row-detail{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(48px,1fr));
+    gap:6px;
+    padding:10px 2px 16px;
+  }
+  .row-detail[hidden]{ display:none; }
+  .char-chip{
+    display:flex; flex-direction:column; align-items:center;
+    padding:6px 2px 5px;
+    border:1px solid var(--paper-line);
+    background:var(--card);
+    border-radius:var(--radius-sm);
+  }
+  .char-chip.new{ opacity:0.55; }
+  .char-chip.learning{ border-color:var(--indigo); }
+  .char-chip.young{ border-color:var(--moss-young); }
+  .char-chip.mature{ border-color:var(--moss); }
+  .char-chip .cc-k{ font-family:"KanaTrainer JP","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif; font-size:17px; color:var(--ink); }
+  .char-chip .cc-label{ font-size:9px; color:var(--ink-soft); margin-top:3px; text-transform:uppercase; letter-spacing:0.03em; }
 
   /* ---------- Card / Study view ---------- */
   .session-bar{
@@ -1195,6 +1226,31 @@ function buildFreeStudySession(scriptMode, rowId){
   return { queue:pool, pos:0, correctCount:0, total:pool.length, naturalSliceByScript:{} };
 }
 
+/* Mastery tiers for the row-progress display — richer than a flat
+   "graduated or not" percentage. 'young' vs 'mature' mirrors the same
+   21-day convention Anki uses to distinguish a review that's still fairly
+   fresh from one that's proven stable over a longer stretch. */
+const MATURE_INTERVAL_DAYS = 21;
+function masteryTier(card){
+  if(!card || card.phase === 'new') return 'new';
+  if(card.phase === 'learning' || card.phase === 'relearning') return 'learning';
+  if(card.phase === 'review') return card.interval >= MATURE_INTERVAL_DAYS ? 'mature' : 'young';
+  return 'new';
+}
+const TIER_RANK = { new:0, learning:1, young:2, mature:3 };
+/* A single representative tier per character (rather than per card) for
+   the compact per-character chips — uses the WEAKER of its directions, so
+   a character isn't shown as "mastered" while one direction still lags. */
+function characterTier(item, directions){
+  let worst = 'mature';
+  directions.forEach(dir=>{
+    const c = state.cards[cardKey(item.kana, dir)];
+    const t = masteryTier(c);
+    if(TIER_RANK[t] < TIER_RANK[worst]) worst = t;
+  });
+  return worst;
+}
+
 /* Leech detection: a card that keeps getting forgotten despite review is a
    different problem than a card that's simply due — it needs deliberate
    extra attention, not just another routine pass through the normal queue.
@@ -1439,20 +1495,42 @@ function rowProgressHtml(scriptId){
   const activeRows = def.rows.filter(isRowEnabled);
   const directions = directionsForMode();
   const items = kanaListForScript(scriptId);
+  const TIER_LABEL = { new:'New', learning:'Learning', young:'Young', mature:'Mature' };
 
   return activeRows.map(row=>{
     const isUnlocked = unlocked.has(row.id);
     const rowItems = items.filter(k=>k.rowId===row.id);
-    let done = 0, denom = rowItems.length*directions.length;
+    const denom = rowItems.length * directions.length;
+
+    let counts = { new:0, learning:0, young:0, mature:0 };
     rowItems.forEach(item=> directions.forEach(dir=>{
       const c = state.cards[cardKey(item.kana,dir)];
-      if(c && c.phase==='review') done++;
+      counts[masteryTier(c)]++;
     }));
-    const pct = denom ? Math.round(100*done/denom) : 0;
-    return `<div class="row-line">
-      <span class="rk ${row.optional?'label':''} ${isUnlocked?'':'locked'}">${row.optional ? row.label : row.items.map(i=>i[0]).join('')}</span>
-      <div class="bar"><div class="fill" style="width:${isUnlocked?pct:0}%"></div></div>
-      <span class="pct">${isUnlocked? pct+'%' : '🔒'}</span>
+    const pctOf = n => denom ? (100*n/denom) : 0;
+    const matureCount = counts.mature;
+
+    const detailId = 'row-detail-' + scriptId + '-' + row.id;
+    const chips = isUnlocked ? rowItems.map(item=>{
+      const tier = characterTier(item, directions);
+      return `<div class="char-chip ${tier}">
+        <div class="cc-k jp">${item.kana}</div>
+        <div class="cc-label">${TIER_LABEL[tier]}</div>
+      </div>`;
+    }).join('') : '';
+
+    return `<div class="row-block">
+      <button class="row-line ${isUnlocked?'unlocked-row':''}" ${isUnlocked?`data-row-detail="${detailId}" aria-expanded="false"`:'disabled'}>
+        <span class="rk ${row.optional?'label':''} ${isUnlocked?'':'locked'}">${row.optional ? row.label : row.items.map(i=>i[0]).join('')}</span>
+        <div class="bar">
+          <div class="seg seg-mature" style="width:${isUnlocked?pctOf(counts.mature):0}%"></div>
+          <div class="seg seg-young" style="width:${isUnlocked?pctOf(counts.young):0}%"></div>
+          <div class="seg seg-learning" style="width:${isUnlocked?pctOf(counts.learning):0}%"></div>
+        </div>
+        <span class="pct">${isUnlocked? matureCount+'/'+denom : '🔒'}</span>
+        ${isUnlocked ? '<span class="row-caret">⌄</span>' : ''}
+      </button>
+      ${isUnlocked ? `<div class="row-detail" id="${detailId}" hidden>${chips}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1545,6 +1623,16 @@ function renderHome(){
 
   const leechBtn = document.getElementById('leechBtn');
   if(leechBtn) leechBtn.onclick = ()=> startLeechDrill(scriptMode);
+
+  document.querySelectorAll('[data-row-detail]').forEach(rowBtn=>{
+    rowBtn.onclick = ()=>{
+      const panel = document.getElementById(rowBtn.dataset.rowDetail);
+      if(!panel) return;
+      const nowOpen = panel.hidden;
+      panel.hidden = !nowOpen;
+      rowBtn.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+    };
+  });
 
   if(due === 0){
     const nextAt = nextAvailableAt(scriptMode);
