@@ -1514,14 +1514,9 @@ function renderHome(){
   let waitBlockHtml = '';
   if(due === 0){
     const nextAt = nextAvailableAt(scriptMode);
-    const countdownNote = nextAt !== null
-      ? ` New characters available in <span id="nextAvailableCountdown">${formatDuration(nextAt - Date.now())}</span>.`
-      : '';
-    if(introducedCount > 0){
-      waitBlockHtml = `<p class="help">Nothing new is due right now, so this reviews what you've already learned instead.${countdownNote}</p>`;
-    } else if(nextAt !== null){
-      waitBlockHtml = `<p class="help">${countdownNote.trim()}</p>`;
-    } else {
+    if(nextAt !== null){
+      waitBlockHtml = `<p class="help">New characters available in <span id="nextAvailableCountdown">${formatDuration(nextAt - Date.now())}</span>.</p>`;
+    } else if(introducedCount === 0){
       waitBlockHtml = `<p class="help">Nothing unlocked yet — check Settings to unlock a row.</p>`;
     }
   }
