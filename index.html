@@ -1077,6 +1077,21 @@ function graded(card, correct, latencyMs){
   }
 
   if(card.phase === 'review'){
+    /* A review-phase card answered before its own due date (voluntary
+       practice via Free Study, a leech drill, or a bonus leech folded into
+       a normal session) is not the "real" spaced review the algorithm is
+       measuring — it's extra practice. Crediting it as if it were the real
+       thing would grow the interval and push the due date out from RIGHT
+       NOW, on top of the growth the interval would already get, which can
+       badly overshoot the original schedule (a card 12 hours from due
+       answered correctly during free study could jump to 5+ days out).
+       So: still log it for stats (reviewsCount/correctCount above already
+       did), but leave interval/ease/reps/dueDate/lapses/phase untouched
+       either way when it wasn't actually due yet. */
+    const wasActuallyDue = card.dueDate <= Date.now();
+    if(!wasActuallyDue){
+      return { requeue:false };
+    }
     if(correct){
       const wideGrid = (card.direction === 'recognition' && state.settings.kanaInputMode[card.script] === 'select' && state.settings.gridScope === 'all');
       const q = wideGrid ? 4 : (latencyMs < 3000 ? 5 : (latencyMs < 7000 ? 4 : 3));
@@ -1495,7 +1510,7 @@ function rowProgressHtml(scriptId){
   const activeRows = def.rows.filter(isRowEnabled);
   const directions = directionsForMode();
   const items = kanaListForScript(scriptId);
-  const TIER_LABEL = { new:'New', learning:'Learning', young:'Young', mature:'Mature' };
+  const TIER_LABEL = { new:'New', learning:'Learning', young:'Reviewing', mature:'Learned' };
 
   return activeRows.map(row=>{
     const isUnlocked = unlocked.has(row.id);
@@ -1663,12 +1678,69 @@ function renderHome(){
   }
 }
 
+/* Character introduction: rather than testing a character cold on its
+   very first encounter (or an active leech's next encounter), show it
+   once — character, reading, and meaning if there is one — then
+   immediately test it as normal. That immediate "just shown, now recall
+   it" sequence doubles as the hint system: no separate hint UI needed,
+   since the exposure itself IS the scaffolding. The test right after is
+   graded normally (feeding the same learning-step pipeline as any other
+   attempt) rather than tracked separately, since there's no meaningful
+   difference in what it measures.
+     - Brand new characters get this exactly once — reviewsCount>0 on
+       either direction means the character (not just this specific card)
+       has already been introduced, so it won't repeat once seen.
+     - Active leeches get it every time they resurface in rotation, and it
+       naturally stops once the leech self-resolves (isLeech turns false),
+       so the frequency tapers off with recovery rather than needing its
+       own decay logic. */
+function needsIntro(card){
+  const otherDirection = card.direction === 'production' ? 'recognition' : 'production';
+  const otherCard = state.cards[cardKey(card.kana, otherDirection)];
+  const everSeenBefore = card.reviewsCount > 0 || (otherCard && otherCard.reviewsCount > 0);
+  if(!everSeenBefore) return true;
+  if(isLeech(card)) return true;
+  return false;
+}
+
+let introAcknowledgedKey = null;
+
+function renderIntroScreen(card, cardKeyStr){
+  const pct = Math.round(100*session.pos/session.total);
+  const isReintro = card.reviewsCount > 0;
+  $main.innerHTML = `
+    <div class="session-bar">
+      <span>${session.pos+1} / ${session.total}</span>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <span>${session.correctCount} correct</span>
+    </div>
+    <div class="card"><div class="card-inner">
+      <div class="prompt-label">${isReintro ? 'Reintroducing' : 'New character'}</div>
+      <div class="prompt-kana jp">${card.kana}</div>
+      <div class="prompt-romaji">${card.romaji}</div>
+      ${card.meaning ? `<p class="help">${card.meaning}</p>` : ''}
+      <button class="start-btn" id="introContinueBtn" style="max-width:220px;margin-top:20px;">Continue</button>
+    </div></div>
+  `;
+  document.getElementById('introContinueBtn').onclick = ()=>{
+    introAcknowledgedKey = cardKeyStr;
+    renderCard();
+  };
+}
+
 function renderCard(){
   if(!session || session.pos >= session.queue.length){
     setRoute('end');
     return;
   }
   const card = session.queue[session.pos];
+  const cardKeyStr = card.kana + '|' + card.direction;
+
+  if(needsIntro(card) && introAcknowledgedKey !== cardKeyStr){
+    renderIntroScreen(card, cardKeyStr);
+    return;
+  }
+
   const pct = Math.round(100*session.pos/session.total);
 
   let body = '';
