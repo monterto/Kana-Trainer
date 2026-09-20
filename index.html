@@ -759,7 +759,7 @@ function acceptedMeanings(meaning){
 /* ============================= SETTINGS ============================= */
 const DEFAULT_SETTINGS = {
   newPerDay: { hiragana:5, katakana:5, kanji:3 },      // per script — kanji defaults slower given the heavier cognitive load
-  reviewCap: { hiragana:15, katakana:15, kanji:12 },   // per script — kept small so a sitting is quick, favoring frequent short sessions over one long grind
+  reviewCap: { hiragana:10, katakana:10, kanji:8 },    // per script — this is now a genuine TOTAL session cap (see buildSession), not just a partial one, so keep it small for quick, frequent sittings
   kanaInputMode: { hiragana:'draw', katakana:'draw', kanji:'select' }, // per script: 'draw' (freehand, self-graded) | 'select' (tap grid)
   includeYouonHiragana: false, // hiragana's optional youon row
   includeYouonKatakana: false, // katakana's optional youon row
@@ -846,14 +846,20 @@ function migrateState(raw){
   raw.settings.reviewCap = migratePerScript(origSettings.reviewCap, DEFAULT_SETTINGS.reviewCap, 'number');
   raw.settings.kanaInputMode = migratePerScript(origSettings.kanaInputMode, DEFAULT_SETTINGS.kanaInputMode, 'string');
 
-  /* reviewCap's defaults shrank (40/40/30 -> 15/15/12) to favor shorter,
-     more frequent sessions. If a saved value exactly matches the OLD
-     default, treat it as "never customized" and carry it forward to the
-     new default rather than leaving it stuck at the old number forever —
+  /* reviewCap's defaults have shrunk twice now (40/40/30 -> 15/15/12 ->
+     10/10/8), chasing "shorter, more frequent sessions" — and the second
+     shrink also came with the actual fix (reviewCap is now a genuine total
+     session cap, not just a partial one; see buildSession). If a saved
+     value exactly matches EITHER prior generation of default, treat it as
+     "never customized" and carry it forward to the current default —
      but leave any value the person actually chose themselves untouched. */
-  const OLD_REVIEW_CAP_DEFAULTS = { hiragana:40, katakana:40, kanji:30 };
+  const OLD_REVIEW_CAP_GENERATIONS = [
+    { hiragana:40, katakana:40, kanji:30 },
+    { hiragana:15, katakana:15, kanji:12 }
+  ];
   ['hiragana','katakana','kanji'].forEach(scriptId=>{
-    if(raw.settings.reviewCap[scriptId] === OLD_REVIEW_CAP_DEFAULTS[scriptId]){
+    const isUntouched = OLD_REVIEW_CAP_GENERATIONS.some(gen => raw.settings.reviewCap[scriptId] === gen[scriptId]);
+    if(isUntouched){
       raw.settings.reviewCap[scriptId] = DEFAULT_SETTINGS.reviewCap[scriptId];
     }
   });
@@ -1196,9 +1202,26 @@ function buildSession(unlimited, scriptMode){
   shuffle(extraLeeches);
   extraLeeches.slice(0, LEECH_INJECT_CAP).forEach(c=>queue.push(c));
 
-  shuffle(queue);
+  /* reviewCap only ever bounded the review-phase slice above — it never
+     actually capped the WHOLE session, since dueLearning (every card
+     currently mid-acquisition) was included in full regardless, and new
+     cards could independently add up to newPerDay×2 more (both directions
+     counted separately). A backlog of in-progress cards plus a full review
+     slice plus new cards plus leeches could add up to well beyond the
+     "cap" a person had actually set, which is the root of sessions running
+     much longer than intended. This is the real, whole-session limit.
+     Everything above was assembled in priority order — in-progress
+     (dueLearning) cards first since they're time-sensitive and already
+     underway, review next, new characters and bonus leeches last — so
+     slicing to the cap here drops the lowest-priority items first rather
+     than cutting whatever happened to be pushed last. */
+  let finalQueue = queue;
+  if(!unlimited){
+    finalQueue = queue.slice(0, effectiveReviewCap);
+  }
+  shuffle(finalQueue);
 
-  return { queue, pos:0, correctCount:0, total:queue.length, naturalSliceByScript };
+  return { queue:finalQueue, pos:0, correctCount:0, total:finalQueue.length, naturalSliceByScript };
 }
 
 function startSession(unlimited, scriptMode){
@@ -2085,7 +2108,7 @@ function scriptSettingsSectionHtml(scriptId){
       <input type="number" class="script-setting" data-field="newPerDay" data-script="${scriptId}" min="1" max="20" value="${s.newPerDay[scriptId]}">
     </div>
     <div class="field">
-      <label>Maximum review cards per session</label>
+      <label>Maximum cards per session</label>
       <input type="number" class="script-setting" data-field="reviewCap" data-script="${scriptId}" min="5" max="200" value="${s.reviewCap[scriptId]}">
     </div>
     <div class="field">
