@@ -1172,10 +1172,40 @@ function buildSession(unlimited, scriptMode){
        explicit request to study it now. */
     const forcedNew = freshNew.filter(c=>isForceUnlocked(c.script, c.rowId));
     const naturalNew = freshNew.filter(c=>!isForceUnlocked(c.script, c.rowId));
-    const newBudget = unlimited ? naturalNew.length : Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
-    const naturalSlice = naturalNew.slice(0, newBudget);
+
+    /* newPerDay is labeled (and should behave as) "characters per day," but
+       naturalNew is a list of CARDS — each character contributes one card
+       per active direction. Budgeting/counting by raw card count instead
+       of unique character count meant the daily budget didn't reliably
+       mean what its own label promised. Group by character so both the
+       selection and the newIntroducedToday accounting are in the same
+       units as the setting itself. */
+    const byChar = {};
+    naturalNew.forEach(c=>{ (byChar[c.kana] = byChar[c.kana] || []).push(c); });
+    const uniqueChars = Object.keys(byChar);
+    shuffle(uniqueChars);
+
+    const dailyBudgetChars = unlimited ? uniqueChars.length : Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
+
+    /* On top of the daily pace, cap how many BRAND NEW characters a single
+       session can introduce — smaller than the daily budget on purpose.
+       Without this, a session on a day with little else due (very common
+       early on, or with three scripts now sharing the ramp-up period)
+       could fill its entire capacity with new material by default, simply
+       because nothing else existed yet to compete for those slots — not
+       because new was crowding review out, but because review wasn't
+       there yet to show up at all. Capping new's per-sitting share means
+       a full day's budget gets spread across a couple of the short,
+       frequent sessions this app is already designed around, rather than
+       one sitting consuming all of it — leaving room, session after
+       session, for whatever review genuinely has built up by then. */
+    const NEW_CHARS_PER_SESSION_CAP = scriptMode === 'kanji' ? 2 : 3;
+    const sessionBudgetChars = unlimited ? dailyBudgetChars : Math.min(dailyBudgetChars, NEW_CHARS_PER_SESSION_CAP);
+
+    const selectedChars = uniqueChars.slice(0, sessionBudgetChars);
+    const naturalSlice = selectedChars.flatMap(k => byChar[k]);
     newSlice = forcedNew.concat(naturalSlice);
-    naturalSliceByScript[scriptMode] = naturalSlice;
+    naturalSliceByScript[scriptMode] = selectedChars; // character keys, not cards — see startSession()
   }
 
   const queue = [];
