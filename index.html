@@ -259,8 +259,7 @@
     z-index:15;
     box-shadow:0 6px 18px rgba(0,0,0,0.25);
     max-height:260px;
-    overflow-y:auto;
-  border-radius:var(--radius);overflow:hidden;}
+  border-radius:var(--radius);overflow-x:hidden;overflow-y:auto;}
   .sub-menu[hidden]{ display:none; }
   .sub-menu button{
     padding:16px 18px;
@@ -777,7 +776,13 @@ function applyTheme(){
 }
 
 /* ============================= STATE ============================= */
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+/* LOCAL calendar date, not UTC. toISOString() is always UTC, which made
+   the daily new-character budget reset mid-afternoon/evening for anyone
+   west of Greenwich (e.g. 4–5pm in US Pacific) instead of at midnight. */
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 
 /* Object.assign({}, DEFAULT_SETTINGS) is only a SHALLOW copy — the nested
    per-script objects (newPerDay, reviewCap, kanaInputMode) would still be
@@ -1013,10 +1018,6 @@ function activeKanaList(scriptId){
 }
 
 /* じ/ぢ (and katakana ジ/ヂ) share an identical Hepburn reading — genuinely
-   ambiguous when only the romaji is shown. Scoped to same-script matches
-   only: か and カ sharing "ka" is just the normal hiragana/katakana
-   relationship, not a genuine ambiguity worth flagging. */
-/* じ/ぢ (and katakana ジ/ヂ) share an identical Hepburn reading — genuinely
    ambiguous when only the romaji is shown, since they're just two spellings
    of the same sound. Kanji reading collisions are a different situation
    entirely: 五/午/語 all read "go" but are completely unrelated characters
@@ -1121,6 +1122,31 @@ function graded(card, correct, latencyMs){
 
 function randBetween(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
 
+/* ---------- Session length limits ----------
+   Missed (and still-learning) cards get re-shown a few cards later in the
+   same session — that quick re-test is the core recall technique. But with
+   no limit, a run of misses kept pushing cards back into the queue and a
+   "10 card" session could drag on indefinitely. Two caps keep sessions
+   short:
+     - each card is shown at most MAX_ATTEMPTS_PER_CARD times per session
+     - the whole session gets a retry budget of SESSION_RETRY_RATIO × its
+       starting size (at least MIN_SESSION_RETRIES), so it never grows past
+       roughly 1.5× what the start button promised
+   A card that hits either cap simply stops for today's sitting. Its
+   learning progress is already saved, and buildSession() always puts
+   in-progress (learning/relearning) cards FIRST, so it leads off the next
+   session — nothing is lost, it's just spread across short sittings. */
+const MAX_ATTEMPTS_PER_CARD = 3;
+const SESSION_RETRY_RATIO = 0.5;
+const MIN_SESSION_RETRIES = 4;
+
+function applySessionLimits(s){
+  s.attempts = {};          // cardKey -> times shown this session
+  s.retriesLeft = Math.max(MIN_SESSION_RETRIES, Math.ceil(s.queue.length * SESSION_RETRY_RATIO));
+  s.carriedOver = new Set(); // cardKeys deferred to the next session
+  return s;
+}
+
 /* ============================= SESSION ============================= */
 let session = null; // { queue:[card,...], pos, correctCount, total, ... }
 
@@ -1185,7 +1211,12 @@ function buildSession(unlimited, scriptMode){
     const uniqueChars = Object.keys(byChar);
     shuffle(uniqueChars);
 
-    const dailyBudgetChars = unlimited ? uniqueChars.length : Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
+    /* The daily budget always applies, even for "unlimited" (Keep studying)
+       sessions — unlimited lifts the per-session caps, not the daily pace.
+       Previously it introduced every remaining character in all unlocked
+       rows at once, which both ignored newPerDay and disagreed with the
+       "N more due" count shown on the button. */
+    const dailyBudgetChars = Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
 
     /* On top of the daily pace, cap how many BRAND NEW characters a single
        session can introduce — smaller than the daily budget on purpose.
@@ -1251,11 +1282,21 @@ function buildSession(unlimited, scriptMode){
   }
   shuffle(finalQueue);
 
+  /* Only charge the daily new-character budget for characters that
+     actually survived the session cap above. New cards sit near the end of
+     the priority order, so on a review-heavy day they were often sliced
+     off — yet still counted as "introduced today", silently burning the
+     budget for characters the person never saw. */
+  Object.keys(naturalSliceByScript).forEach(scriptId=>{
+    const shown = new Set(finalQueue.filter(c=>c.script===scriptId && c.phase==='new').map(c=>c.kana));
+    naturalSliceByScript[scriptId] = naturalSliceByScript[scriptId].filter(k=>shown.has(k));
+  });
+
   return { queue:finalQueue, pos:0, correctCount:0, total:finalQueue.length, naturalSliceByScript };
 }
 
 function startSession(unlimited, scriptMode){
-  session = buildSession(unlimited, scriptMode);
+  session = applySessionLimits(buildSession(unlimited, scriptMode));
   Object.entries(session.naturalSliceByScript).forEach(([scriptId, list])=>{
     state.newIntroducedToday[scriptId] += list.length;
   });
@@ -1368,12 +1409,12 @@ function buildLeechSession(scriptMode){
 }
 
 function startLeechDrill(scriptMode){
-  session = buildLeechSession(scriptMode);
+  session = applySessionLimits(buildLeechSession(scriptMode));
   setRoute('study');
 }
 
 function startFreeStudy(scriptMode, rowId){
-  session = buildFreeStudySession(scriptMode, rowId);
+  session = applySessionLimits(buildFreeStudySession(scriptMode, rowId));
   setRoute('study');
 }
 
@@ -1415,14 +1456,16 @@ function dueCount(scriptMode){
       });
       const forced = freshCards.filter(c=>isForceUnlocked(c.script, c.rowId)).length;
       forcedFreshTotal += forced;
-      naturalFreshTotal += (freshCards.length - forced);
+      // Count unique CHARACTERS here: the daily budget below is in characters,
+      // and each character contributes one card per active direction.
+      naturalFreshTotal += new Set(freshCards.filter(c=>!isForceUnlocked(c.script, c.rowId)).map(c=>c.kana)).size;
     }
   });
 
   if(scriptMode === 'mixed') return n; // mixed never counts new cards — review-only by design
 
   const newBudget = Math.max(0, state.settings.newPerDay[scriptMode] - state.newIntroducedToday[scriptMode]);
-  return n + forcedFreshTotal + Math.min(newBudget, naturalFreshTotal);
+  return n + forcedFreshTotal + Math.min(newBudget, naturalFreshTotal) * directions.length;
 }
 
 /* When nothing is due right now, figure out WHEN the next thing becomes
@@ -1433,9 +1476,9 @@ function dueCount(scriptMode){
    mode never introduces new cards, so only review dates apply there.
    Returns a timestamp (ms), or null if there's genuinely nothing left
    scheduled or waiting (e.g. everything currently unlocked is mastered). */
-function nextUtcMidnight(){
+function nextLocalMidnight(){
   const now = new Date();
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()+1, 0, 0, 0, 0);
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 0, 0).getTime();
 }
 
 function nextAvailableAt(scriptMode){
@@ -1466,7 +1509,7 @@ function nextAvailableAt(scriptMode){
     }).length;
     const budgetUsedUp = state.newIntroducedToday[scriptMode] >= state.settings.newPerDay[scriptMode];
     if(naturalFreshCount > 0 && budgetUsedUp){
-      const midnight = nextUtcMidnight();
+      const midnight = nextLocalMidnight();
       if(earliest === null || midnight < earliest) earliest = midnight;
     }
   }
@@ -1646,7 +1689,15 @@ function renderHome(){
      to do right now, whatever it is." */
   let primaryLabel, primaryDisabled = false, primaryAction;
   if(due > 0){
-    primaryLabel = scriptMode === 'mixed' ? `Start mixed review (${due} cards)` : `Start session (${due} cards)`;
+    /* Label with the size the session will ACTUALLY start at (after the
+       session cap and the per-session new-character cap), not the full
+       due count — otherwise "Start session (25 cards)" opened a 10-card
+       session. The full backlog is still shown in the "cards due now" tile.
+       buildSession() has no side effects beyond creating card records,
+       which dueCount() above already did. */
+    const sessionSize = buildSession(false, scriptMode).queue.length;
+    const cardsWord = sessionSize === 1 ? 'card' : 'cards';
+    primaryLabel = scriptMode === 'mixed' ? `Start mixed review (${sessionSize} ${cardsWord})` : `Start session (${sessionSize} ${cardsWord})`;
     primaryAction = ()=> startSession(false, scriptMode);
   } else if(introducedCount > 0){
     primaryLabel = 'Practice now';
@@ -1661,7 +1712,9 @@ function renderHome(){
   if(due === 0){
     const nextAt = nextAvailableAt(scriptMode);
     if(nextAt !== null){
-      waitBlockHtml = `<p class="help">New characters available in <span id="nextAvailableCountdown">${formatDuration(nextAt - Date.now())}</span>.</p>`;
+      /* nextAt may be a review coming due OR the daily new-character reset,
+         so don't claim it's always "new characters". */
+      waitBlockHtml = `<p class="help">More cards available in <span id="nextAvailableCountdown">${formatDuration(nextAt - Date.now())}</span>.</p>`;
     } else if(introducedCount === 0){
       waitBlockHtml = `<p class="help">Nothing unlocked yet — check Settings to unlock a row.</p>`;
     }
@@ -1725,11 +1778,16 @@ function renderHome(){
     freeMenu.querySelectorAll('[data-scope]').forEach(b=>{
       b.onclick = ()=> startFreeStudy(scriptMode, b.dataset.scope);
     });
-    document.addEventListener('click', (e)=>{
-      if(!freeMenu.hidden && !freeMenu.contains(e.target) && e.target !== freeToggle) freeMenu.hidden = true;
-    });
   }
 }
+
+/* One document-level listener for the Free Study dropdown. This used to be
+   added inside renderHome(), so a new listener piled up on every render. */
+document.addEventListener('click', (e)=>{
+  const freeMenu = document.getElementById('freeStudyMenu');
+  const freeToggle = document.getElementById('freeStudyToggle');
+  if(freeMenu && !freeMenu.hidden && !freeMenu.contains(e.target) && e.target !== freeToggle) freeMenu.hidden = true;
+});
 
 /* Character introduction: rather than testing a character cold on its
    very first encounter (or an active leech's next encounter), show it
@@ -1799,9 +1857,19 @@ function renderCard(){
   let body = '';
   const drawMode = (card.direction === 'recognition' && state.settings.kanaInputMode[card.script] === 'draw');
   const homophones = (card.direction === 'recognition') ? homophonesOf(card.kana) : [];
+  /* Kanji that share a reading (五/午/語 are all "go", 千/先 are both "sen")
+     are different characters, so unlike じ/ぢ only one is correct — but with
+     only "go" on screen there was no way to know which. For just those
+     cards, show the meaning too so the prompt has exactly one answer. */
+  const kanjiTwins = (card.direction === 'recognition' && card.script === 'kanji')
+    ? ALL_KANA_LIST.filter(k=>k.script==='kanji' && k.romaji===card.romaji && k.kana!==card.kana)
+    : [];
   const homophoneNote = homophones.length
     ? `<p class="help" style="margin-top:2px;">${homophones.join(' / ')} ${homophones.length>1?'are':'is'} also read "${card.romaji}" — either is correct here.</p>`
-    : '';
+    : (kanjiTwins.length && card.meaning
+      ? `<p class="help" style="margin-top:2px;">meaning: <strong>${card.meaning}</strong></p>`
+      : '');
+  const charWord = card.script === 'kanji' ? 'kanji' : 'kana';
 
   if(card.direction === 'production'){
     body = `
@@ -1815,7 +1883,7 @@ function renderCard(){
     `;
   } else if(drawMode){
     body = `
-      <div class="prompt-label">Draw the matching kana from memory</div>
+      <div class="prompt-label">Draw the matching ${charWord} from memory</div>
       <div class="prompt-romaji">${card.romaji}</div>
       ${homophoneNote}
       <div class="draw-wrap">
@@ -1833,7 +1901,7 @@ function renderCard(){
     const options = pool.slice();
     shuffle(options);
     body = `
-      <div class="prompt-label">Select the matching kana</div>
+      <div class="prompt-label">Select the matching ${charWord}</div>
       <div class="prompt-romaji">${card.romaji}</div>
       ${homophoneNote}
       <div class="answer-area">
@@ -1877,10 +1945,21 @@ function renderCard(){
           : 'Not quite — ' + card.kana + ' is "' + card.romaji + '"' + (card.meaning ? ' (' + card.meaning + ')' : '');
       }
     }
+    session.attempts[cardKeyStr] = (session.attempts[cardKeyStr] || 0) + 1;
     if(result.requeue){
-      const insertAt = Math.min(session.queue.length, session.pos + result.lag);
-      session.queue.splice(insertAt, 0, card);
-      session.total = session.queue.length;
+      const canRetry = session.attempts[cardKeyStr] < MAX_ATTEMPTS_PER_CARD && session.retriesLeft > 0;
+      if(canRetry){
+        const insertAt = Math.min(session.queue.length, session.pos + result.lag);
+        session.queue.splice(insertAt, 0, card);
+        session.total = session.queue.length;
+        session.retriesLeft--;
+      } else {
+        // Cap reached — stop for this sitting; it leads off the next session.
+        session.carriedOver.add(cardKeyStr);
+        if(fb && !correct) fb.textContent += ' — this one will come up first next session.';
+      }
+    } else {
+      session.carriedOver.delete(cardKeyStr);
     }
     document.querySelectorAll('.grid button, #submitBtn, #romajiInput, #clearBtn, #revealBtn, #selfYes, #selfNo').forEach(el=> el.disabled = true);
     if(drawMode){
@@ -2002,6 +2081,7 @@ function renderSessionEnd(){
     <div class="session-end">
       <div class="num">${pct}%</div>
       <p>${session.correctCount} of ${session.total} correct this session.</p>
+      ${session.carriedOver && session.carriedOver.size ? `<p class="help">${session.carriedOver.size} card${session.carriedOver.size===1?'':'s'} still being learned will come up first next session.</p>` : ''}
       ${moreDue > 0 ? `<button class="start-btn" id="continueBtn" style="max-width:260px;margin:20px auto 0;">Keep studying (${moreDue} more due)</button>` : ''}
       <button class="start-btn" id="doneBtn" style="max-width:260px;margin:${moreDue>0?'12px':'20px'} auto 0;background:transparent;color:var(--ink);border:1px solid var(--paper-line);">Back to overview</button>
     </div>
@@ -2242,15 +2322,16 @@ function renderSettings(){
     renderSettings();
   };
 
-  document.querySelectorAll('.script-setting[data-field="newPerDay"]').forEach(inp=>{
-    inp.onchange = e=>{
-      s.newPerDay[inp.dataset.script] = Math.max(1, parseInt(e.target.value)||1);
-      persistState();
-    };
-  });
-  document.querySelectorAll('.script-setting[data-field="reviewCap"]').forEach(inp=>{
-    inp.onchange = e=>{
-      s.reviewCap[inp.dataset.script] = Math.max(5, parseInt(e.target.value)||5);
+  /* Clamp to the input's own min/max and write the saved value back into
+     the box — previously typing 2 saved 5 but the box kept showing 2, and
+     the max (20 / 200) wasn't enforced at all. */
+  document.querySelectorAll('.script-setting[data-field="newPerDay"], .script-setting[data-field="reviewCap"]').forEach(inp=>{
+    inp.onchange = ()=>{
+      const min = Number(inp.min), max = Number(inp.max);
+      const n = parseInt(inp.value, 10);
+      const val = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min;
+      s[inp.dataset.field][inp.dataset.script] = val;
+      inp.value = val;
       persistState();
     };
   });
@@ -2371,9 +2452,13 @@ if('serviceWorker' in navigator && location.protocol !== 'file:'){
      automatically, the moment a new service worker takes control, so
      updates apply themselves instead of silently waiting for the next
      manual close-and-reopen. */
+  /* Only reload when an existing worker is being REPLACED. On the very
+     first visit clients.claim() also fires controllerchange, which made
+     the page reload itself once for no reason. */
+  const hadController = !!navigator.serviceWorker.controller;
   let swRefreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-    if(swRefreshing) return;
+    if(swRefreshing || !hadController) return;
     swRefreshing = true;
     window.location.reload();
   });
