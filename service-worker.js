@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes app files, so old caches get replaced.
-const CACHE_NAME = 'kana-trainer-v1.21';
+const CACHE_NAME = 'kana-trainer-v1.22';
 
 const APP_SHELL = [
   './',
@@ -15,7 +15,10 @@ const APP_SHELL = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      // `cache: 'reload'` = always download fresh copies. GitHub Pages lets
+      // phones reuse files for 10 minutes, so without it a new version could
+      // be stored with the OLD files and stay stuck on them.
+      .then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
